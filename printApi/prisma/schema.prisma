@@ -1,0 +1,216 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  username     String    @unique @db.VarChar(50)
+  email        String    @unique @db.VarChar(100)
+  passwordHash String    @db.VarChar(255)
+  firstName    String?   @db.VarChar(50)
+  lastName     String?   @db.VarChar(50)
+  isActive     Boolean   @default(true)
+  isAdmin      Boolean   @default(false)
+  createdAt    DateTime  @default(now()) @db.Timestamp(0)
+  updatedAt    DateTime  @default(now()) @db.Timestamp(0)
+  lastLoginAt  DateTime? @db.Timestamp(0)
+  isManager    Boolean   @default(false)
+  isMember     Boolean   @default(false)
+}
+
+model Customer {
+  id      Int     @id @default(autoincrement())
+  name    String  @db.VarChar(255)
+  email   String  @db.VarChar(255)
+  mobile  String  @db.VarChar(20)
+  mobile2 String? @db.VarChar(20)
+  company String? @db.VarChar(255)
+  address String? @db.Text
+  orders  Order[] 
+}
+
+model Order {
+  id          Int          @id @default(autoincrement())
+  customerId  Int
+  customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  orderNumber String       @db.VarChar(100)  // "ORD 1234"
+  title       String       @db.VarChar(255)  // Title field in form
+  status      String       @default("Draft") @db.VarChar(50) // Draft / Processing / Production / Ready
+  startDate   DateTime?    @db.DateTime(0)   // Start Date
+  dueDate     DateTime     @db.DateTime(0)   // Due Date
+  notes       String?      @db.Text          // Notes
+  files       OrderFile[]                     // File uploads (multi-file)
+  createdBy   String?   @db.VarChar(100)
+  updatedBy   String?   @db.VarChar(100)
+  token       String?   @unique @db.VarChar(100)
+
+
+  items       OrderItem[]  // 1-to-many with OrderItem
+  comments            OrderComment[]
+  activity            ActivityLog[] 
+
+  @@index([customerId])
+}
+
+model OrderItem {
+  id         Int      @id @default(autoincrement())
+  orderId    Int
+  productId  Int
+  color      String?  @db.VarChar(100) // Color dropdown
+  quantity   Int                              // Total quantity (sum of sizes)
+  price      Float                            // Single price value or overridden total
+  currentStage        String?   @db.VarChar(100)   
+  createdBy           String?   @db.VarChar(100)
+  updatedBy           String?   @db.VarChar(100)
+
+  activity            ActivityLog[]              
+  sizeQuantities      SizeQuantities[]
+  order               Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product             Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  comments            OrderComment[]
+  
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+
+enum ProductCategory {
+  GOODS_WITH_SERVICE
+  SERVICE
+}
+
+
+model Product {
+  id           Int         @id @default(autoincrement())
+  serviceId    Int          
+  title        String      // From UI (required)
+  files               OrderFile[]
+  unitPrice    Float       // From UI
+  category     ProductCategory
+  colorOptions Json?    // Array of colors
+  sizeOptions  Json?
+  orderItems   OrderItem[] // 1-to-many with OrderItem (existing)
+  activity      ActivityLog[]
+  service      Service?    @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  createdBy    String?   @db.VarChar(100)
+  updatedBy    String?   @db.VarChar(100)
+
+  
+}
+
+model SizeQuantities{
+  id           Int         @id @default(autoincrement())
+  orderitemId  Int
+  orderitem    OrderItem  @relation(fields: [orderitemId], references: [id], onDelete: Cascade)
+  Size       String?  @db.VarChar(100)
+  Price      Int
+  Quantity   Int
+  createdBy   String?   @db.VarChar(100)
+  updatedBy   String?   @db.VarChar(100)
+
+}
+
+model Service {
+  id          Int       @id @default(autoincrement())
+  title       String    // From UI (required)
+  workflow    Workflow? @relation(fields: [workflowId], references: [id]) // Optional workflow
+  workflowId  Int?
+  products    Product[] // 1-to-many with Product (a service can be used by multiple products)
+  createdBy   String?   @db.VarChar(100)
+  updatedBy   String?   @db.VarChar(100)
+
+}
+
+model Workflow {
+  id          Int      @id @default(autoincrement())
+  title       String   // From UI (required)
+  stages      Stage[]  // 1-to-many with Stage
+  services    Service[] // 1-to-many with Service
+  createdBy   String?   @db.VarChar(100)
+  updatedBy   String?   @db.VarChar(100)
+
+}
+
+model Stage {
+  id          Int       @id @default(autoincrement())
+  title       String    // From UI (required)
+  color       String    // Hex color code
+  days        Int       // Duration in days
+  workflow    Workflow? @relation(fields: [workflowId], references: [id])
+  workflowId  Int?      // Many-to-1 with Workflow (many stages belong to one workflow)
+  createdBy   String?   @db.VarChar(100)
+  updatedBy   String?   @db.VarChar(100)
+}
+
+
+
+
+
+
+
+
+model OrderFile {
+  id           Int       @id @default(autoincrement())
+  productId    Int?
+  orderId      Int?
+
+  fileName     String    @db.VarChar(255)
+  filePath     String    @db.VarChar(500)
+  isApproved   Boolean   @default(false)
+  approvedBy   String?   @db.VarChar(100)
+  approvedAt   DateTime? @db.DateTime(0)
+  uploadedBy   String?   @db.VarChar(100)
+  updatedBy   String?   @db.VarChar(100)
+  uploadedAt   DateTime  @default(now()) @db.DateTime(0)
+  createdAt    DateTime  @default(now()) @db.DateTime(0)
+  updatedAt    DateTime  @default(now()) @db.DateTime(0)
+
+ 
+  order        Order?    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product      Product?   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model OrderComment {
+  id              Int        @id @default(autoincrement())
+  orderId         Int?
+  orderItemId     Int?
+  commentText     String     @db.Text
+  commentBy       String?    @db.VarChar(100)
+  commentAt       DateTime   @default(now()) @db.DateTime(0)
+  parentCommentId Int?
+  createdAt       DateTime   @default(now()) @db.DateTime(0)
+  updatedAt       DateTime   @default(now()) @db.DateTime(0)
+  order           Order?      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItem       OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  parentComment   OrderComment? @relation("CommentReplies", fields: [parentCommentId], references: [id], onDelete: Cascade)
+  replies         OrderComment[] @relation("CommentReplies")
+  is_internal     Boolean   @default(false)
+
+  @@index([orderId])
+  @@index([orderItemId])
+  @@index([parentCommentId])
+}
+
+model ActivityLog {
+  id           Int      @id @default(autoincrement())
+  order        Order?      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId      Int?
+  orderItem    OrderItem?    @relation(fields: [orderItemId], references: [id])
+  orderItemId  Int?
+
+  product      Product?    @relation(fields: [productId], references: [id])
+  productId    Int?
+  action       String
+  performedBy  String
+  createdAt    DateTime @default(now())
+}
