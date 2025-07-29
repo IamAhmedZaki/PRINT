@@ -143,6 +143,7 @@ export default function CreateOrder() {
       const newItems = [...prev.items, {
         productId: '',
         color: '',
+        size: '', // Initialize size field
         sizeQuantities: [],
         productTitle: '',
         serviceTitle: '',
@@ -174,13 +175,18 @@ export default function CreateOrder() {
     setIsItemCollapsed(prev => ({ ...prev, [index]: !prev[index] }));
   };
 
-  // Add size to item
+  // Add size
   const addSize = (itemIndex) => {
     setOrderData(prev => {
       const newItems = [...prev.items];
+      const item = newItems[itemIndex];
+      if (!item.unitPrice) {
+        toast.error('Please select a product with a valid price before adding a size.');
+        return prev;
+      }
       newItems[itemIndex] = {
         ...newItems[itemIndex],
-        sizeQuantities: [...newItems[itemIndex].sizeQuantities, { Size: '', Price: 0, Quantity: 0 }]
+        sizeQuantities: [...newItems[itemIndex].sizeQuantities, { Size: '', Price: item.unitPrice, Quantity: 1 }]
       };
       return updateTotals({ ...prev, items: newItems });
     });
@@ -207,11 +213,15 @@ export default function CreateOrder() {
           newItems[itemIndex] = {
             ...newItems[itemIndex],
             productId: value,
-            productTitle: product.id.toString(),
+            productTitle: product.title || '',
             serviceTitle: services.find(s => s.id === product.serviceId)?.title || '',
-            image: product.imageUrl || '',
+            image: product.files?.[0]?.filePath
+              ? `https://printmanager-api.onrender.com${product.files[0].filePath}`
+              : '',
             colorOptions: product.colorOptions || [],
+            sizeOptions: product.sizeOptions || [], // Fetch sizeOptions
             color: '',
+            size: '', // Initialize size
             unitPrice: product.unitPrice || 0
           };
           return updateTotals({ ...prev, items: newItems });
@@ -268,7 +278,6 @@ export default function CreateOrder() {
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Submitting orderData:', orderData); // Debug: Log orderData before submission
     if (!orderData.customerId || !orderData.orderNumber || !orderData.title || !orderData.dueDate || !orderData.items.length) {
       toast.error('Please fill in all required fields');
       return;
@@ -292,6 +301,7 @@ export default function CreateOrder() {
     const itemsData = orderData.items.map(item => ({
       productId: parseInt(item.productId),
       color: item.color,
+      size: item.size, // Include size in itemsData
       quantity: item.quantity,
       price: item.total,
       sizeQuantities: item.sizeQuantities.map(size => ({
@@ -343,8 +353,6 @@ export default function CreateOrder() {
     }
   };
 
-  console.log(orderData);
-
   return (
     <form className="flex flex-col gap-7">
       <div className="bg-white p-8 rounded-lg w-full border-[1px] border-[#e5e7eb]">
@@ -390,7 +398,7 @@ export default function CreateOrder() {
               name="orderNumber"
               value={orderData.orderNumber}
               readOnly
-              className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg bg-gray-100"
+              className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg bg-gray-100 focus:outline-none focus:ring-2 focus:ring-[#5750f1]"
               required
             />
           </div>
@@ -417,11 +425,11 @@ export default function CreateOrder() {
               onChange={handleChange}
               className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1]"
             >
-              <option value="Draft">Draft</option>
-              <option value="Confirmed">Confirmed</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Completed">Completed</option>
-              <option value="Cancelled">Cancelled</option>
+              <option value="draft">Draft</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="in progress">In Progress</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
             </select>
           </div>
 
@@ -495,35 +503,28 @@ export default function CreateOrder() {
         <div className="mt-8 pt-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-medium text-[#111928]">Order Items</h2>
-            <button
-              type="button"
-              onClick={addItem}
-              className="py-2 px-4 bg-[#5750f1] text-white rounded-lg hover:bg-blue-700"
-            >
-              Add Item
-            </button>
           </div>
 
           {orderData.items.map((item, itemIndex) => (
-            <div key={itemIndex} className="mb-4">
+            <div key={itemIndex} className="mb-4 bg-white border border-[#e2e8f0] rounded-lg shadow-[0_2px_5px_rgba(0,0,0,0.1)]">
               <div
-                className="flex justify-between items-center p-4 bg-[#f8fafc] border border-[#e2e8f0] rounded-lg cursor-pointer"
+                className="flex justify-between items-center p-6 cursor-pointer"
                 onClick={() => toggleItemCollapse(itemIndex)}
               >
                 <h3 className="text-md font-medium text-[#111928]">Item #{itemIndex + 1}</h3>
-                <span>{isItemCollapsed[itemIndex] ? '+' : '−'}</span>
+                <span className="w-[35px] h-[35px] rounded-full flex justify-center items-center text-[20px] font-normal border-[2px] border-[#5750f1] text-[#5750f1]">{isItemCollapsed[itemIndex] ? '+' : '−'}</span>
               </div>
               <div
                 className={`overflow-hidden transition-all duration-300 ease-in-out ${
                   isItemCollapsed[itemIndex] ? 'max-h-0' : 'max-h-[1000px]'
                 }`}
               >
-                <div className="p-4 bg-[#f8fafc] border border-[#e2e8f0] rounded-lg mt-2">
+                <div className="p-4 mt-2">
                   {orderData.items.length > 1 && (
                     <button
                       type="button"
                       onClick={() => removeItem(itemIndex)}
-                      className="text-[#ef4444] text-sm mb-4 block"
+                      className="text-[#ef4444] text-sm mb-4 block cursor-pointer"
                     >
                       Remove
                     </button>
@@ -541,7 +542,7 @@ export default function CreateOrder() {
                           handleItemChange(itemIndex, 'productTitle', e.target.value);
                           handleProductSearch(e.target.value, itemIndex);
                         }}
-                        className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1]"
+                        className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1] bg-[#f2f2f3]"
                         required
                       />
                       {productSearchResults[itemIndex]?.length > 0 && (
@@ -564,7 +565,7 @@ export default function CreateOrder() {
                       <select
                         value={item.color}
                         onChange={(e) => handleItemChange(itemIndex, 'color', e.target.value)}
-                        className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1]"
+                        className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1] bg-[#f2f2f3]"
                       >
                         <option value="">Select Color</option>
                         {item.colorOptions?.map((color, i) => (
@@ -574,10 +575,18 @@ export default function CreateOrder() {
                         ))}
                       </select>
                     </div>
-                    {item.image && (
+
+                    {item.image ? (
                       <div>
                         <label className="block text-sm font-medium text-[#111928]">Product Image</label>
-                        <img src={item.image} alt="Product" className="h-24 object-contain" />
+                        <img src={item.image} alt={item.productTitle} className="h-24 object-contain" />
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-sm font-medium text-[#111928]">Product Image</label>
+                        <div className="h-24 flex items-center justify-center text-sm text-[#6b7280]">
+                          No image available
+                        </div>
                       </div>
                     )}
 
@@ -587,7 +596,7 @@ export default function CreateOrder() {
                         type="text"
                         value={item.serviceTitle}
                         readOnly
-                        className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1]"
+                        className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1] bg-[#f2f2f3]"
                       />
                     </div>
 
@@ -597,7 +606,7 @@ export default function CreateOrder() {
                         type="number"
                         value={item.total}
                         readOnly
-                        className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1]"
+                        className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1] bg-[#f2f2f3]"
                       />
                     </div>
 
@@ -607,7 +616,7 @@ export default function CreateOrder() {
                         type="number"
                         value={item.quantity}
                         readOnly
-                        className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1]"
+                        className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1] bg-[#f2f2f3]"
                       />
                     </div>
                   </div>
@@ -629,12 +638,18 @@ export default function CreateOrder() {
                       <div key={sizeIndex} className="flex gap-4 mb-2 items-end">
                         <div className="flex-1">
                           <label className="block text-sm font-medium text-[#111928]">Size</label>
-                          <input
-                            type="text"
+                          <select
                             value={size.Size}
                             onChange={(e) => handleSizeChange(itemIndex, sizeIndex, 'Size', e.target.value)}
-                            className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1]"
-                          />
+                            className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1] bg-[#f2f2f3]"
+                          >
+                            <option value="">Select Size</option>
+                            {item.sizeOptions?.map((size, i) => (
+                              <option key={i} value={size}>
+                                {size}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                         <div className="flex-1">
                           <label className="block text-sm font-medium text-[#111928]">Price</label>
@@ -642,7 +657,7 @@ export default function CreateOrder() {
                             type="number"
                             value={size.Price}
                             onChange={(e) => handleSizeChange(itemIndex, sizeIndex, 'Price', e.target.value)}
-                            className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1]"
+                            className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1] bg-[#f2f2f3]"
                           />
                         </div>
                         <div className="flex-1">
@@ -651,7 +666,7 @@ export default function CreateOrder() {
                             type="number"
                             value={size.Quantity}
                             onChange={(e) => handleSizeChange(itemIndex, sizeIndex, 'Quantity', e.target.value)}
-                            className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1]"
+                            className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1] bg-[#f2f2f3]"
                           />
                         </div>
                         <button
@@ -668,6 +683,15 @@ export default function CreateOrder() {
               </div>
             </div>
           ))}
+        </div>
+        <div className="flex">
+          <button
+            type="button"
+            onClick={addItem}
+            className="py-2 px-4 bg-[#5750f1] text-white rounded-lg hover:bg-blue-700"
+          >
+            Add Item
+          </button>
         </div>
 
         <div className="mt-6 flex justify-between items-center">

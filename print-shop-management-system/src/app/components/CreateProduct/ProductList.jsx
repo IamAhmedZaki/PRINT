@@ -39,7 +39,8 @@ const EditProductPopup = ({ isOpen, onClose, product, onSave, services }) => {
     title: product?.title || '',
     unitPrice: product?.unitPrice ? product.unitPrice : '',
     category: product?.category || '',
-    colorOptions: product?.colorOptions ? (Array.isArray(product.colorOptions) ? product.colorOptions[0] || '' : '') : '',
+    colorOptions: product?.colorOptions ? (Array.isArray(product.colorOptions) ? product.colorOptions : []) : [],
+    sizeOptions: product?.sizeOptions ? (Array.isArray(product.sizeOptions) ? product.sizeOptions : []) : [],
     serviceId: product?.serviceId || '',
     files: null,
   });
@@ -47,6 +48,7 @@ const EditProductPopup = ({ isOpen, onClose, product, onSave, services }) => {
   const fileInputRef = useRef(null);
 
   const colorOptions = ['Red', 'Blue', 'Green', 'Yellow', 'Black', 'White', 'Purple', 'Orange'];
+  const sizeOptions = ['Small', 'Medium', 'Large', 'XL', 'XXL'];
   const categoryOptions = ['GOODS_WITH_SERVICE', 'SERVICE'];
 
   useEffect(() => {
@@ -55,7 +57,8 @@ const EditProductPopup = ({ isOpen, onClose, product, onSave, services }) => {
         title: product.title || '',
         unitPrice: product.unitPrice ? product.unitPrice : '',
         category: product.category || '',
-        colorOptions: product.colorOptions ? (Array.isArray(product.colorOptions) ? product.colorOptions[0] || '' : '') : '',
+        colorOptions: product.colorOptions ? (Array.isArray(product.colorOptions) ? product.colorOptions : []) : [],
+        sizeOptions: product.sizeOptions ? (Array.isArray(product.sizeOptions) ? product.sizeOptions : []) : [],
         serviceId: product.serviceId || '',
         files: null,
       });
@@ -66,6 +69,24 @@ const EditProductPopup = ({ isOpen, onClose, product, onSave, services }) => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    setError(null);
+  };
+
+  const handleColorChange = (e) => {
+    const selectedColors = Array.from(e.target.selectedOptions).map(option => option.value);
+    setFormData((prev) => ({
+      ...prev,
+      colorOptions: selectedColors,
+    }));
+    setError(null);
+  };
+
+  const handleSizeChange = (e) => {
+    const selectedSizes = Array.from(e.target.selectedOptions).map(option => option.value);
+    setFormData((prev) => ({
+      ...prev,
+      sizeOptions: selectedSizes,
+    }));
     setError(null);
   };
 
@@ -80,7 +101,7 @@ const EditProductPopup = ({ isOpen, onClose, product, onSave, services }) => {
       setError('Image size must be less than 5MB');
       return;
     }
-    setFormData((prev) => ({ ...prev, files: files[0] })); // Store single file
+    setFormData((prev) => ({ ...prev, files: files[0] }));
     setError(null);
   };
 
@@ -113,7 +134,7 @@ const EditProductPopup = ({ isOpen, onClose, product, onSave, services }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.title || !formData.unitPrice || !formData.category || !formData.serviceId || !formData.colorOptions) {
+    if (!formData.title || !formData.unitPrice || !formData.category || !formData.serviceId || formData.colorOptions.length === 0 || formData.sizeOptions.length === 0) {
       toast.error('Please fill in all required fields');
       setError('Please fill in all required fields');
       return;
@@ -126,11 +147,12 @@ const EditProductPopup = ({ isOpen, onClose, product, onSave, services }) => {
     if (formData.files) {
       submitData.append('files', formData.files);
     } else if (product.files && product.files[0]?.filePath) {
-      submitData.append('existingFilePath', product.files[0].filePath); // Send existing image path
+      submitData.append('existingFilePath', product.files[0].filePath);
     }
     submitData.append('unitPrice', parseFloat(formData.unitPrice));
     submitData.append('category', formData.category);
-    submitData.append('colorOptions', JSON.stringify([formData.colorOptions]));
+    submitData.append('colorOptions', JSON.stringify(formData.colorOptions));
+    submitData.append('sizeOptions', JSON.stringify(formData.sizeOptions));
     submitData.append('serviceId', parseInt(formData.serviceId));
 
     try {
@@ -246,21 +268,40 @@ const EditProductPopup = ({ isOpen, onClose, product, onSave, services }) => {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-[#111928]">Color</label>
+            <label className="block text-sm font-medium text-[#111928]">Colors</label>
             <select
               name="colorOptions"
+              multiple
               value={formData.colorOptions}
-              onChange={handleChange}
+              onChange={handleColorChange}
               className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1]"
               required
             >
-              <option value="">Select Color</option>
               {colorOptions.map((color, index) => (
                 <option key={index} value={color}>
                   {color}
                 </option>
               ))}
             </select>
+            <p className="text-sm text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple colors</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-[#111928]">Sizes</label>
+            <select
+              name="sizeOptions"
+              multiple
+              value={formData.sizeOptions}
+              onChange={handleSizeChange}
+              className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1]"
+              required
+            >
+              {sizeOptions.map((size, index) => (
+                <option key={index} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+            <p className="text-sm text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple sizes</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-[#111928]">Service</label>

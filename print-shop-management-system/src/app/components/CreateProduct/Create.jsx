@@ -8,10 +8,11 @@ export default function CreateProduct() {
   const router = useRouter();
   const [productData, setProductData] = useState({
     title: '',
-    image: null, // Store File or FileList
+    image: null,
     unitPrice: '',
     category: '',
-    colorOptions: '',
+    colorOptions: [], // Array for multiple colors
+    sizeOptions: [], // Array for multiple sizes
     serviceId: '',
   });
   const [services, setServices] = useState([]);
@@ -19,8 +20,9 @@ export default function CreateProduct() {
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef(null);
 
-  // Predefined colors for dropdown
+  // Predefined colors and sizes
   const colorOptions = ['Red', 'Blue', 'Green', 'Yellow', 'Black', 'White', 'Purple', 'Orange'];
+  const sizeOptions = ['Small', 'Medium', 'Large', 'XL', 'XXL'];
 
   // Predefined categories
   const categoryOptions = ['GOODS_WITH_SERVICE', 'SERVICE'];
@@ -34,7 +36,6 @@ export default function CreateProduct() {
           throw new Error('Failed to fetch services');
         }
         const data = await response.json();
-        console.log('API Response:', data); // Log for debugging
         const servicesArray = Array.isArray(data)
           ? data
           : Array.isArray(data.services)
@@ -56,6 +57,24 @@ export default function CreateProduct() {
     setProductData((prev) => ({
       ...prev,
       [name]: value,
+    }));
+  };
+
+  // Handle multiple select for colors
+  const handleColorChange = (e) => {
+    const selectedColors = Array.from(e.target.selectedOptions).map(option => option.value);
+    setProductData((prev) => ({
+      ...prev,
+      colorOptions: selectedColors,
+    }));
+  };
+
+  // Handle multiple select for sizes
+  const handleSizeChange = (e) => {
+    const selectedSizes = Array.from(e.target.selectedOptions).map(option => option.value);
+    setProductData((prev) => ({
+      ...prev,
+      sizeOptions: selectedSizes,
     }));
   };
 
@@ -107,7 +126,7 @@ export default function CreateProduct() {
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!productData.title || !productData.unitPrice || !productData.category || !productData.serviceId || !productData.colorOptions) {
+    if (!productData.title || !productData.unitPrice || !productData.category || !productData.serviceId || productData.colorOptions.length === 0 || productData.sizeOptions.length === 0) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -121,14 +140,13 @@ export default function CreateProduct() {
     formData.append('title', productData.title);
     const files = productData.image;
     for (let file of files) {
-      formData.append('files', file); // Append each file
+      formData.append('files', file);
     }
-    formData.append('unitPrice', parseInt(productData.unitPrice)); // Convert dollars to cents
+    formData.append('unitPrice', parseInt(productData.unitPrice));
     formData.append('category', productData.category);
-    // Parse colorOptions as array
-    const colors = productData.colorOptions.split(',').map(c => c.trim()).filter(Boolean);
-    formData.append('colorOptions', JSON.stringify(colors));
-    formData.append('serviceId', parseInt(productData.serviceId)); // Ensure number
+    formData.append('colorOptions', JSON.stringify(productData.colorOptions)); // Send as JSON array
+    formData.append('sizeOptions', JSON.stringify(productData.sizeOptions)); // Send as JSON array
+    formData.append('serviceId', parseInt(productData.serviceId));
 
     try {
       const response = await fetch('https://printmanager-api.onrender.com/api/products', {
@@ -145,10 +163,11 @@ export default function CreateProduct() {
         image: null,
         unitPrice: '',
         category: '',
-        colorOptions: '',
+        colorOptions: [],
+        sizeOptions: [],
         serviceId: '',
       });
-      fileInputRef.current.value = ''; // Clear file input
+      fileInputRef.current.value = '';
       setTimeout(() => {
         router.push('/dashboard/products/list');
       }, 2000);
@@ -191,7 +210,7 @@ export default function CreateProduct() {
             >
               {productData.image && productData.image[0] ? (
                 <img
-                  src={URL.createObjectURL(productData.image[0])} // Preview first file
+                  src={URL.createObjectURL(productData.image[0])}
                   alt="Product Preview"
                   className="h-full object-contain"
                 />
@@ -244,21 +263,42 @@ export default function CreateProduct() {
 
           {/* Color Options */}
           <div>
-            <label className="block text-sm font-medium text-[#111928]">Color</label>
+            <label className="block text-sm font-medium text-[#111928]">Colors</label>
             <select
               name="colorOptions"
+              multiple
               value={productData.colorOptions}
-              onChange={handleChange}
+              onChange={handleColorChange}
               className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1]"
               required
             >
-              <option value="">Select Color</option>
               {colorOptions.map((color, index) => (
                 <option key={index} value={color}>
                   {color}
                 </option>
               ))}
             </select>
+            <p className="text-sm text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple colors</p>
+          </div>
+
+          {/* Size Options */}
+          <div>
+            <label className="block text-sm font-medium text-[#111928]">Sizes</label>
+            <select
+              name="sizeOptions"
+              multiple
+              value={productData.sizeOptions}
+              onChange={handleSizeChange}
+              className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1]"
+              required
+            >
+              {sizeOptions.map((size, index) => (
+                <option key={index} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+            <p className="text-sm text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple sizes</p>
           </div>
 
           {/* Service Options */}

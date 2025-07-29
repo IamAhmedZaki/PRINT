@@ -186,7 +186,7 @@ const DeleteServicePopup = ({ isOpen, onClose, serviceId, onDelete }) => {
   );
 };
 
-const DropdownMenu = ({ serviceId, menuPosition, menuOpen, onDelete }) => {
+const DropdownMenu = ({ serviceId, menuPosition, menuOpen, onDelete, setMenuOpen }) => {
   if (menuOpen !== serviceId) return null;
   return createPortal(
     <div
@@ -200,6 +200,7 @@ const DropdownMenu = ({ serviceId, menuPosition, menuOpen, onDelete }) => {
         onClick={(e) => {
           e.stopPropagation();
           onDelete(serviceId);
+          setMenuOpen(null); // Close the dropdown menu
         }}
         className="block w-full text-left px-4 py-2 text-sm text-[#111928] hover:bg-[#f7f9fc] transition"
       >
@@ -391,6 +392,7 @@ export default function Services() {
                     setSelectedService(service);
                     setDeletePopupOpen(true);
                   }}
+                  setMenuOpen={setMenuOpen}
                 />
               </div>
             </div>
@@ -399,7 +401,7 @@ export default function Services() {
       )}
       <CreateServicePopup
         isOpen={createPopupOpen}
-        onClose={() => setCreatePopupOpen(false)}
+        onClose={() => setCreatePopupOpen(false) }
         onSave={handleCreateService}
         workflows={workflows}
       />
