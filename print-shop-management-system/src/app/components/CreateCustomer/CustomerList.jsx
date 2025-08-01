@@ -29,7 +29,8 @@ const ViewAddressPopup = ({ isOpen, onClose, address }) => {
 const EditCustomerPopup = ({ isOpen, onClose, customer, onSave }) => {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
-    name: customer?.name || '',
+    firstName: customer?.firstName || '',
+    lastName: customer?.lastName || '',
     email: customer?.email || '',
     mobile: customer?.mobile || '',
     mobile2: customer?.mobile2 || '',
@@ -41,7 +42,8 @@ const EditCustomerPopup = ({ isOpen, onClose, customer, onSave }) => {
   useEffect(() => {
     if (customer) {
       setFormData({
-        name: customer.name || '',
+       firstName: customer?.firstName || '',
+    lastName: customer?.lastName || '',
         email: customer.email || '',
         mobile: customer.mobile || '',
         mobile2: customer.mobile2 || '',
@@ -103,7 +105,18 @@ const EditCustomerPopup = ({ isOpen, onClose, customer, onSave }) => {
             <input
               type="text"
               name="name"
-              value={formData.name}
+              value={formData.firstName}
+              onChange={handleChange}
+              className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1]"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-[#111928]">Name</label>
+            <input
+              type="text"
+              name="name"
+              value={formData.lastName}
               onChange={handleChange}
               className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1]"
               required
@@ -482,7 +495,8 @@ export default function CustomerList({ onCustomerUpdated }) {
               <thead>
                 <tr className="border-none bg-[#F7F9FC] py-4 text-base text-[#111928]">
                   <th className="h-12 px-4 text-left align-middle font-medium text-neutral-500 min-w-[100px] xl:pl-7.5">Customer ID</th>
-                  <th className="h-12 px-4 text-left align-middle font-medium text-neutral-500">Name</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-neutral-500">First Name</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-neutral-500">Last Name</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-neutral-500">Email</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-neutral-500">Mobile</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-neutral-500">Mobile 2</th>
@@ -501,7 +515,10 @@ export default function CustomerList({ onCustomerUpdated }) {
                       <p className="text-[#111928]">{customer.id || 'N/A'}</p>
                     </td>
                     <td className="p-4 align-middle">
-                      <p className="text-[#111928]">{customer.name || 'N/A'}</p>
+                      <p className="text-[#111928]">{customer.firstName || 'N/A'}</p>
+                    </td>
+                    <td className="p-4 align-middle">
+                      <p className="text-[#111928]">{customer.lastName || 'N/A'}</p>
                     </td>
                     <td className="p-4 align-middle">
                       <p className="text-[#111928]">{customer.email || 'N/A'}</p>

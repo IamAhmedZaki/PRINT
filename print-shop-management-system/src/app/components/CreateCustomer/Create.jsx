@@ -5,7 +5,8 @@ import { ToastContainer, toast } from 'react-toastify';
 
 export default function Create() {
   const [data, setData] = useState({
-    name: '',
+    firstName: '',
+    lastName: '',
     email: '',
     mobile: '',
     mobile2: '',
@@ -21,22 +22,28 @@ export default function Create() {
   const mobile2Ref = useRef(null);
 
   const handleChange = (e) => {
-    setData({
-      ...data,
-      [e.target.name]: e.target.value,
-    });
-    setErrors({
-      ...errors,
-      [e.target.name]: '',
-    });
-  };
+  const { name, value } = e.target;
+  setData({
+    ...data,
+    [name]: value,
+  });
+  setErrors({
+    ...errors,
+    [name]: '',
+  });
+};
+
 
   const validateForm = () => {
     const newErrors = {};
     let firstInvalidField = null;
 
-    if (!data.name.trim()) {
-      newErrors.name = 'Name is required';
+    if (!data.firstName.trim()) {
+      newErrors.firstName = 'Name is required';
+      if (!firstInvalidField) firstInvalidField = nameRef;
+    }
+    if (!data.lastName.trim()) {
+      newErrors.lastName = 'Name is required';
       if (!firstInvalidField) firstInvalidField = nameRef;
     }
     if (!data.email.trim()) {
@@ -93,7 +100,8 @@ export default function Create() {
 
       if (response.ok) {
         setData({
-          name: '',
+          firstName: '',
+          lastName: '',
           email: '',
           mobile: '',
           mobile2: '',
@@ -122,21 +130,39 @@ export default function Create() {
         )}
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label htmlFor="name" className="block text-[#111928] font-medium mb-2">Name *</label>
+            <label htmlFor="firstName" className="block text-[#111928] font-medium mb-2">First Name</label>
             <input
               type="text"
-              id="name"
-              name="name"
-              value={data.name}
+              id="firstName"
+              name="firstName"
+              value={data.firstName}
               onChange={handleChange}
               placeholder="Enter customer name"
               className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1] ${errors.name ? 'border-red-500' : 'border-gray-300'}`}
               ref={nameRef}
             />
             {errors.name && (
-              <div className="text-red-600 text-sm mt-1">{errors.name}</div>
+              <div className="text-red-600 text-sm mt-1">{errors.firstName}</div>
             )}
-          </div>
+            
+            
+            <label htmlFor="lastName" className="block text-[#111928] font-medium mb-2">Last Name</label>
+            <input
+              type="text"
+              id="lastName"
+              name="lastName"
+              value={data.lastName}
+              onChange={handleChange}
+              placeholder="Enter customer name"
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1] ${errors.name ? 'border-red-500' : 'border-gray-300'}`}
+              ref={nameRef}
+            />
+            {errors.name && (
+              <div className="text-red-600 text-sm mt-1">{errors.lastName}</div>
+            )}
+          </div> 
+          
+          
           <div className="mb-4">
             <label htmlFor="email" className="block text-[#111928] font-medium mb-2">Email *</label>
             <input

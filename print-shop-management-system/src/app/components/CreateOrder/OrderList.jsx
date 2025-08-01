@@ -10,11 +10,15 @@ const DeleteOrderPopup = ({ isOpen, onClose, orderId, onDelete }) => {
   const [error, setError] = useState(null);
 
   const handleDelete = async () => {
+    const token= sessionStorage.getItem('authToken')
     setLoading(true);
     setError(null);
     try {
       const response = await fetch(`https://printmanager-api.onrender.com/api/orders/${orderId}`, {
         method: 'DELETE',
+           headers: {
+    'Authorization': `Bearer ${token}`
+  }
       });
       if (!response.ok) {
         toast.error('Failed to delete order');
@@ -117,6 +121,7 @@ export default function OrderList() {
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 });
   const [deleteOrder, setDeleteOrder] = useState({ isOpen: false, orderId: null });
   const [customerNames, setCustomerNames] = useState({});
+  const [customerLastNames, setCustomerLastNames] = useState({});
 
   // Fetch orders and customer names
   useEffect(() => {
@@ -140,18 +145,23 @@ export default function OrderList() {
             const res = await fetch(`https://printmanager-api.onrender.com/api/customers/${id}`);
             if (!res.ok) throw new Error(`Failed to fetch customer ${id}`);
             const customerData = await res.json();
-            return { id, name: customerData.name || 'N/A' };
+            return { id, firstName: customerData.firstName|| 'N/A', lastName: customerData.lastName || 'N/A' };
           } catch (err) {
             console.error(err);
             return { id, name: 'N/A' };
           }
         });
         const customers = await Promise.all(customerPromises);
-        const customerMap = customers.reduce((acc, { id, name }) => {
-          acc[id] = name;
+        const customerMap = customers.reduce((acc, { id, firstName }) => {
+          acc[id] = firstName;
+          return acc;
+        }, {});
+        const customerMapLast = customers.reduce((acc, { id, lastName }) => {
+          acc[id] = lastName;
           return acc;
         }, {});
         setCustomerNames(customerMap);
+        setCustomerLastNames(customerMapLast);
         setError(null);
       } catch (error) {
         console.error('Error fetching orders:', error);
@@ -182,6 +192,7 @@ export default function OrderList() {
           (order.orderNumber?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
           (order.title?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
           (customerNames[order.customerId]?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+          (customerLastNames[order.customerId]?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
           (order.status?.toLowerCase().includes(searchTerm.toLowerCase()) || false)
         );
       })
@@ -343,7 +354,8 @@ export default function OrderList() {
                       <p className="text-[#111928]">{order.orderNumber || 'N/A'}</p>
                     </td>
                     <td className="p-4 align-middle">
-                      <p className="text-[#111928]">{customerNames[order.customerId] || 'N/A'}</p>
+                      <p className="text-[#111928]">{customerNames[order.customerId] || 'N/A'} {customerLastNames[order.customerId] || 'N/A'}</p>
+                      
                     </td>
                     <td className="p-4 align-middle">
                       <p className="text-[#111928]">{order.title || 'N/A'}</p>

@@ -110,7 +110,7 @@ const Calendar = () => {
         </h2>
         <button
           onClick={nextMonth}
-          className="py-3.5 px-10 lg:px-8 xl:px-10 bg-[#5750f1] rounded-full text-white cursor-pointer"
+          className="py-3.5 px-10 lg:px-8 xl:px-10 bg-[#5750f1] rounded-full text-white cursor-pointer hover:bg-blue-700"
         >
           Next
         </button>

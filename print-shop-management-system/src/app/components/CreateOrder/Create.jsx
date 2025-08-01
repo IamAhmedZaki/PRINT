@@ -8,7 +8,8 @@ export default function CreateOrder() {
   const router = useRouter();
   const [orderData, setOrderData] = useState({
     customerId: '',
-    orderNumber: '',
+    customerName: '',
+    // orderNumber: '',
     title: '',
     status: 'Draft',
     startDate: new Date().toISOString().split('T')[0],
@@ -17,7 +18,8 @@ export default function CreateOrder() {
     items: [],
     total: 0,
     totalQuantity: 0,
-    files: null,
+    files: [],
+    createdBy:''
   });
   const [products, setProducts] = useState([]);
   const [services, setServices] = useState([]);
@@ -26,17 +28,19 @@ export default function CreateOrder() {
   const [customerInfo, setCustomerInfo] = useState(null);
   const [customerSearchResults, setCustomerSearchResults] = useState([]);
   const [productSearchResults, setProductSearchResults] = useState([]);
-  const fileInputRef = useRef(null);
+  const [serviceDropdowns, setServiceDropdowns] = useState({});
+  const fileInputRefs = useRef([]);
+  const [fileInputs, setFileInputs] = useState([0]);
   const [isItemCollapsed, setIsItemCollapsed] = useState({});
 
   // Generate order number
-  useEffect(() => {
-    const generateOrderNumber = () => {
-      const randomNum = Math.floor(1000 + Math.random() * 9000);
-      setOrderData(prev => ({ ...prev, orderNumber: `OR#${randomNum}` }));
-    };
-    generateOrderNumber();
-  }, []);
+  // useEffect(() => {
+  //   const generateOrderNumber = () => {
+  //     const randomNum = Math.floor(1000 + Math.random() * 9000);
+  //     setOrderData(prev => ({ ...prev, orderNumber: `OR#${randomNum}` }));
+  //   };
+  //   generateOrderNumber();
+  // }, []);
 
   // Fetch customers, products, and services
   useEffect(() => {
@@ -72,7 +76,8 @@ export default function CreateOrder() {
     const lowerSearch = searchTerm.toLowerCase();
     const results = customers.filter(customer =>
       customer.id.toString().includes(searchTerm) ||
-      (customer.name && customer.name.toLowerCase().includes(lowerSearch)) ||
+      (customer.firstName && customer.firstName.toLowerCase().includes(lowerSearch)) ||
+      (customer.lastName && customer.lastName.toLowerCase().includes(lowerSearch)) ||
       (customer.company && customer.company.toLowerCase().includes(lowerSearch)) ||
       (customer.email && customer.email.toLowerCase().includes(lowerSearch)) ||
       (customer.mobile && customer.mobile.toLowerCase().includes(lowerSearch))
@@ -87,7 +92,7 @@ export default function CreateOrder() {
       if (!res.ok) throw new Error('Customer not found');
       const data = await res.json();
       setCustomerInfo(data);
-      setOrderData(prev => ({ ...prev, customerId: customer.id.toString() }));
+      setOrderData(prev => ({ ...prev, customerId: customer.id.toString(), customerName: customer.name }));
       setCustomerSearchResults([]);
     } catch (err) {
       toast.error(err.message || 'Error fetching customer');
@@ -99,24 +104,53 @@ export default function CreateOrder() {
   const handleProductSearch = (searchTerm, itemIndex) => {
     if (searchTerm.length < 3) {
       setProductSearchResults(prev => ({ ...prev, [itemIndex]: [] }));
+      setServiceDropdowns(prev => ({ ...prev, [itemIndex]: {} }));
       return;
     }
     const lowerSearch = searchTerm.toLowerCase();
-    const results = products.filter(product =>
-      product.id.toString().includes(searchTerm) ||
-      (product.title && product.title.toLowerCase().includes(lowerSearch))
-    );
+    const results = products.filter(product => {
+      const service = services.find(s => s.id === product.serviceId);
+      const serviceTitle = service?.title || '';
+      return (
+        product.id.toString().includes(searchTerm) ||
+        (product.title && product.title.toLowerCase().includes(lowerSearch)) ||
+        (serviceTitle && serviceTitle.toLowerCase().includes(lowerSearch))
+      );
+    });
+    
+    // Group products by service
+    const groupedByService = results.reduce((acc, product) => {
+      const serviceId = product.serviceId;
+      const serviceTitle = services.find(s => s.id === serviceId)?.title || 'Unknown';
+      if (!acc[serviceId]) {
+        acc[serviceId] = { title: serviceTitle, products: [] };
+      }
+      acc[serviceId].products.push(product);
+      return acc;
+    }, {});
+
     setProductSearchResults(prev => ({
       ...prev,
-      [itemIndex]: results.slice(0, 10)
+      [itemIndex]: Object.values(groupedByService)
+    }));
+  };
+
+  // Toggle service dropdown
+  const toggleServiceDropdown = (itemIndex, serviceId) => {
+    setServiceDropdowns(prev => ({
+      ...prev,
+      [itemIndex]: {
+        ...prev[itemIndex],
+        [serviceId]: !prev[itemIndex]?.[serviceId]
+      }
     }));
   };
 
   // Handle input changes
   const handleChange = (e) => {
     const { name, value } = e.target;
-    if (name === 'customerId') {
-      setOrderData(prev => ({ ...prev, customerId: value }));
+    if (name === 'customerName') {
+      setOrderData(prev => ({ ...prev, customerName: value }));
       handleCustomerSearch(value);
     } else {
       setOrderData(prev => ({ ...prev, [name]: value }));
@@ -124,7 +158,7 @@ export default function CreateOrder() {
   };
 
   // Handle file upload
-  const handleFileChange = (e) => {
+  const handleFileChange = (e, index) => {
     const files = e.target.files;
     if (files && files.length > 0) {
       for (let file of files) {
@@ -133,7 +167,27 @@ export default function CreateOrder() {
           return;
         }
       }
-      setOrderData(prev => ({ ...prev, files }));
+      setOrderData(prev => {
+        const newFiles = [...prev.files];
+        newFiles[index] = files[0];
+        return { ...prev, files: newFiles };
+      });
+    }
+  };
+
+  // Add new file input
+  const addFileInput = () => {
+    setFileInputs(prev => [...prev, prev.length]);
+  };
+
+  // Remove file input
+  const removeFileInput = (index) => {
+    if (fileInputs.length > 1) {
+      setFileInputs(prev => prev.filter((_, i) => i !== index));
+      setOrderData(prev => {
+        const newFiles = prev.files.filter((_, i) => i !== index);
+        return { ...prev, files: newFiles };
+      });
     }
   };
 
@@ -143,7 +197,7 @@ export default function CreateOrder() {
       const newItems = [...prev.items, {
         productId: '',
         color: '',
-        size: '', // Initialize size field
+        size: '',
         sizeQuantities: [],
         productTitle: '',
         serviceTitle: '',
@@ -219,14 +273,15 @@ export default function CreateOrder() {
               ? `https://printmanager-api.onrender.com${product.files[0].filePath}`
               : '',
             colorOptions: product.colorOptions || [],
-            sizeOptions: product.sizeOptions || [], // Fetch sizeOptions
+            sizeOptions: product.sizeOptions || [],
             color: '',
-            size: '', // Initialize size
+            size: '',
             unitPrice: product.unitPrice || 0
           };
           return updateTotals({ ...prev, items: newItems });
         });
         setProductSearchResults(prev => ({ ...prev, [itemIndex]: [] }));
+        setServiceDropdowns(prev => ({ ...prev, [itemIndex]: {} }));
       } catch (err) {
         toast.error(err.message || 'Error fetching product');
       }
@@ -278,7 +333,7 @@ export default function CreateOrder() {
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!orderData.customerId || !orderData.orderNumber || !orderData.title || !orderData.dueDate || !orderData.items.length) {
+    if (!orderData.customerId || !orderData.title || !orderData.dueDate || !orderData.items.length) {
       toast.error('Please fill in all required fields');
       return;
     }
@@ -287,9 +342,10 @@ export default function CreateOrder() {
     const formData = new FormData();
     
     formData.append('customerId', parseInt(orderData.customerId));
-    formData.append('orderNumber', orderData.orderNumber);
+    // formData.append('orderNumber', orderData.orderNumber);
     formData.append('title', orderData.title);
     formData.append('status', orderData.status);
+    formData.append('createdBy', sessionStorage.getItem('username'));
     if (orderData.startDate) {
       formData.append('startDate', new Date(orderData.startDate).toISOString());
     }
@@ -301,7 +357,7 @@ export default function CreateOrder() {
     const itemsData = orderData.items.map(item => ({
       productId: parseInt(item.productId),
       color: item.color,
-      size: item.size, // Include size in itemsData
+      size: item.size,
       quantity: item.quantity,
       price: item.total,
       sizeQuantities: item.sizeQuantities.map(size => ({
@@ -314,7 +370,9 @@ export default function CreateOrder() {
 
     if (orderData.files) {
       for (let file of orderData.files) {
-        formData.append('files', file);
+        if (file) {
+          formData.append('files', file);
+        }
       }
     }
 
@@ -330,7 +388,8 @@ export default function CreateOrder() {
       toast.success('Order created successfully');
       setOrderData({
         customerId: '',
-        orderNumber: `OR#${Math.floor(1000 + Math.random() * 9000)}`,
+        customerName: '',
+        // orderNumber: `OR#${Math.floor(1000 + Math.random() * 9000)}`,
         title: '',
         status: 'Draft',
         startDate: new Date().toISOString().split('T')[0],
@@ -339,12 +398,13 @@ export default function CreateOrder() {
         items: [],
         total: 0,
         totalQuantity: 0,
-        files: null
+        files: []
       });
       setCustomerInfo(null);
       setCustomerSearchResults([]);
       setProductSearchResults({});
-      fileInputRef.current.value = '';
+      setFileInputs([0]);
+      fileInputRefs.current.forEach(ref => ref && (ref.value = ''));
       setTimeout(() => router.push('/dashboard/order/list'), 2000);
     } catch (err) {
       toast.error(err.message || 'Error creating order');
@@ -363,8 +423,8 @@ export default function CreateOrder() {
             </label>
             <input
               type="text"
-              name="customerId"
-              value={orderData.customerId}
+              name="customerName"
+              value={orderData.customerName}
               onChange={handleChange}
               className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1]"
               required
@@ -384,12 +444,12 @@ export default function CreateOrder() {
             )}
             {customerInfo && (
               <div className="mt-2 text-sm text-[#111928]">
-                Customer: {customerInfo.name} {customerInfo.email && `(${customerInfo.email})`}
+                Customer: {customerInfo.name} {customerInfo.email && `(${customerInfo.email})`} {`(${customerInfo.mobile})`}
               </div>
             )}
           </div>
 
-          <div>
+          {/* <div>
             <label className="block text-sm font-medium text-[#111928] after:content-['*'] after:text-[#ef4444]">
               Order Number
             </label>
@@ -401,7 +461,7 @@ export default function CreateOrder() {
               className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg bg-gray-100 focus:outline-none focus:ring-2 focus:ring-[#5750f1]"
               required
             />
-          </div>
+          </div> */}
 
           <div>
             <label className="block text-sm font-medium text-[#111928] after:content-['*'] after:text-[#ef4444]">
@@ -467,32 +527,53 @@ export default function CreateOrder() {
             />
             <div className="mt-2">
               <label className="block text-sm font-medium text-[#111928]">Upload Files</label>
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                multiple
-                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
-                className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg"
-              />
-              {orderData.files && (
+              {fileInputs.map((_, index) => (
+                <div key={index} className="flex items-center gap-2 mb-2">
+                  <input
+                    type="file"
+                    ref={el => fileInputRefs.current[index] = el}
+                    onChange={(e) => handleFileChange(e, index)}
+                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                    className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg"
+                  />
+                  {fileInputs.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeFileInput(index)}
+                      className="text-[#ef4444] text-sm"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={addFileInput}
+                className="mt-2 py-1 px-3 bg-[#5750f1] text-white rounded-lg text-sm hover:bg-blue-700"
+              >
+                More Files
+              </button>
+              {orderData.files.length > 0 && (
                 <div className="mt-2">
-                  {Array.from(orderData.files).map((file, index) => (
-                    <div key={index} className="flex justify-between p-2 bg-[#f8fafc] border border-[#e2e8f0] rounded-lg">
-                      <span>{file.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOrderData(prev => ({
-                            ...prev,
-                            files: Array.from(prev.files).filter((_, i) => i !== index)
-                          }));
-                        }}
-                        className="text-[#ef4444]"
-                      >
-                        Remove
-                      </button>
-                    </div>
+                  {orderData.files.map((file, index) => (
+                    file && (
+                      <div key={index} className="flex justify-between p-2 bg-[#f8fafc] border border-[#e2e8f0] rounded-lg mb-2">
+                        <span>{file.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOrderData(prev => ({
+                              ...prev,
+                              files: prev.files.filter((_, i) => i !== index)
+                            }));
+                          }}
+                          className="text-[#ef4444]"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )
                   ))}
                 </div>
               )}
@@ -500,7 +581,7 @@ export default function CreateOrder() {
           </div>
         </div>
 
-        <div className="mt-8 pt-6">
+        <div className="mt-8 pt-6 border-[#e2e8f0] border-t-[2px]">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-medium text-[#111928]">Order Items</h2>
           </div>
@@ -511,7 +592,9 @@ export default function CreateOrder() {
                 className="flex justify-between items-center p-6 cursor-pointer"
                 onClick={() => toggleItemCollapse(itemIndex)}
               >
-                <h3 className="text-md font-medium text-[#111928]">Item #{itemIndex + 1}</h3>
+                <h3 className="text-md font-medium text-[#111928]">
+                  Item {item.productTitle ? `- ${item.productTitle}` : `#${itemIndex + 1}`}
+                </h3>
                 <span className="w-[35px] h-[35px] rounded-full flex justify-center items-center text-[20px] font-normal border-[2px] border-[#5750f1] text-[#5750f1]">{isItemCollapsed[itemIndex] ? '+' : '−'}</span>
               </div>
               <div
@@ -544,16 +627,33 @@ export default function CreateOrder() {
                         }}
                         className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1] bg-[#f2f2f3]"
                         required
+                        placeholder="Search by product or service"
                       />
                       {productSearchResults[itemIndex]?.length > 0 && (
                         <div className="absolute z-10 w-full mt-1 bg-white border border-[#e5e7eb] rounded-lg shadow-lg max-h-60 overflow-auto">
-                          {productSearchResults[itemIndex].map(product => (
-                            <div
-                              key={product.id}
-                              className="px-4 py-2 hover:bg-[#f8fafc] cursor-pointer"
-                              onClick={() => handleItemChange(itemIndex, 'productId', product.id.toString())}
-                            >
-                              {product.title} [{services.find(s => s.id === product.serviceId)?.title || ''}]
+                          {productSearchResults[itemIndex].map((service, serviceIndex) => (
+                            <div key={serviceIndex} className="border-b border-[#e5e7eb]">
+                              <div
+                                className="px-4 py-2 hover:bg-[#f8fafc] cursor-pointer flex justify-between items-center"
+                                onClick={() => toggleServiceDropdown(itemIndex, serviceIndex)}
+                              >
+                                <span>{service.title}</span>
+                                <span>{serviceDropdowns[itemIndex]?.[serviceIndex] ? '−' : '+'}</span>
+                              </div>
+                              {serviceDropdowns[itemIndex]?.[serviceIndex] && (
+                                <div>
+                                  {service.products.map(product => (
+                                    <div
+                                      key={product.id}
+                                      className="w-full px-4 py-2 hover:bg-[#f8fafc] cursor-pointer flex items-center gap-3"
+                                      onClick={() => handleItemChange(itemIndex, 'productId', product.id.toString())}
+                                    >
+                                      <div className="w-[15px] h-[15px] bg-[#5750f1] rounded-full"></div>
+                                      {product.title}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -575,50 +675,31 @@ export default function CreateOrder() {
                         ))}
                       </select>
                     </div>
-
-                    {item.image ? (
+                  </div>
+                    <div className="w-full my-10 rounded-[10px] border border-[#e5e7eb] p-5 flex gap-6 items-center">
+                        {item.image ? (
+                        <div>
+                          <img src={item.image} alt={item.productTitle} className=" w-[120px] object-contain rounded-[10px] border-[#e5e7eb] border" />
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="h-24 flex items-center justify-center text-sm text-[#6b7280]">
+                            No image available
+                          </div>
+                        </div>
+                      )}
                       <div>
-                        <label className="block text-sm font-medium text-[#111928]">Product Image</label>
-                        <img src={item.image} alt={item.productTitle} className="h-24 object-contain" />
-                      </div>
-                    ) : (
-                      <div>
-                        <label className="block text-sm font-medium text-[#111928]">Product Image</label>
-                        <div className="h-24 flex items-center justify-center text-sm text-[#6b7280]">
-                          No image available
+                        <div className="text-[18px] text-[#111928]">{item.productTitle}</div>
+                        <div className="flex gap-4">
+                          <div className="text-[#6b7280] text-[14px]">Color: {item.color || 'Not selected'}</div>
+                          <div className="text-[#6b7280] text-[14px]">Service: {item.serviceTitle || 'N/A'}</div>
                         </div>
                       </div>
-                    )}
-
-                    <div>
-                      <label className="block text-sm font-medium text-[#111928]">Service</label>
-                      <input
-                        type="text"
-                        value={item.serviceTitle}
-                        readOnly
-                        className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1] bg-[#f2f2f3]"
-                      />
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-[#111928]">Item Total</label>
-                      <input
-                        type="number"
-                        value={item.total}
-                        readOnly
-                        className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1] bg-[#f2f2f3]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-[#111928]">Total Quantity</label>
-                      <input
-                        type="number"
-                        value={item.quantity}
-                        readOnly
-                        className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1] bg-[#f2f2f3]"
-                      />
-                    </div>
+                  <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="border border-[#e5e7eb] px-5 py-4 flex flex-col gap-2"><h5 className="font-bold text-[#111928] text-[16px]">Total:</h5> <h5 className="text-[#6b7280] text-[15px]">${item.total}</h5></div>
+                      <div className="border border-[#e5e7eb] px-5 py-4 flex flex-col gap-2"><h5 className="font-bold text-[#111928] text-[16px]">Quantity:</h5> <h5 className="text-[#6b7280] text-[15px]">{item.quantity}</h5></div>
                   </div>
 
                   <div className="mt-4">
@@ -672,7 +753,7 @@ export default function CreateOrder() {
                         <button
                           type="button"
                           onClick={() => removeSize(itemIndex, sizeIndex)}
-                          className="text-[#ef4444] text-sm"
+                          className="text-[#ef4444] text-sm cursor-pointer"
                         >
                           Remove
                         </button>
@@ -694,12 +775,13 @@ export default function CreateOrder() {
           </button>
         </div>
 
-        <div className="mt-6 flex justify-between items-center">
-          <div>
-            <span className="text-sm font-medium text-[#111928]">Order Total: ${orderData.total.toFixed(2)}</span>
-            <span className="ml-4 text-sm font-medium text-[#111928]">Total Quantity: {orderData.totalQuantity}</span>
+        <div className="mt-6 w-full flex flex-col items-end gap-8">
+          <div className='w-[25%]'>
+            <div className="text-sm font-medium text-[#111928] flex justify-between w-full mb-4"><h5 className="text-[#111928] font-medium text-[17px]">Total Quantity:</h5> <h5 className="text-[#111928] font-medium text-[17px]">{orderData.totalQuantity}</h5></div>
+            <div className="text-sm font-medium text-[#111928] flex justify-between w-full border-t border-[#e5e7eb] pt-[15px]"><h5 className="text-[#111928] font-medium text-[17px]">Order Total:</h5> <h5 className="text-[#111928] font-medium text-[17px]">${orderData.total}</h5></div>
           </div>
-          <button
+          <div className="flex justify-end">
+            <button
             type="submit"
             onClick={handleSubmit}
             className={`py-3 px-8 bg-[#5750f1] text-white rounded-lg flex items-center ${loading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700'}`}
@@ -717,6 +799,7 @@ export default function CreateOrder() {
             )}
             {loading ? 'Creating Order...' : 'Create Order'}
           </button>
+          </div>
         </div>
       </div>
       <ToastContainer />

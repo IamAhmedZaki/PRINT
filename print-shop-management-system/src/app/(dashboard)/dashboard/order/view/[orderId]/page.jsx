@@ -6,6 +6,51 @@ import { ToastContainer, toast } from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
 import axios from 'axios';
 
+// Custom Check Icon (from CreateProduct)
+function CheckIcon({ className }) {
+  return (
+    <svg
+      width="11"
+      height="8"
+      viewBox="0 0 11 8"
+      fill="currentColor"
+      className={className}
+    >
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M10.2355 0.812752L10.2452 0.824547C10.4585 1.08224 10.4617 1.48728 10.1855 1.74621L4.85633 7.09869C4.66442 7.29617 4.41535 7.4001 4.14693 7.4001C3.89823 7.4001 3.63296 7.29979 3.43735 7.09851L0.788615 4.43129C0.536589 4.1703 0.536617 3.758 0.788643 3.49701C1.04747 3.22897 1.4675 3.22816 1.72731 3.49457L4.16182 5.94608L9.28643 0.799032C9.54626 0.532887 9.96609 0.533789 10.2248 0.801737L10.2355 0.812752Z"
+        fill=""
+      />
+    </svg>
+  );
+}
+
+// Custom Checkbox (radio style for single select)
+function CustomStageRadio({ label, checked, onChange, name }) {
+  const id = React.useId();
+  return (
+    <div className="mb-2">
+      <label htmlFor={id} className="flex cursor-pointer select-none items-center text-sm text-[#111928]">
+        <div className="relative">
+          <input
+            type="radio"
+            name={name}
+            id={id}
+            checked={checked}
+            onChange={onChange}
+            className="peer sr-only"
+          />
+          <div className="mr-2 flex size-5 items-center justify-center rounded border border-[#e5e7eb] peer-checked:border-[#5750f1] peer-checked:bg-[#f3f4f6] [&>*]:text-[#5750f1] peer-checked:[&>*]:block">
+            <CheckIcon className="hidden text-[#5750f1]" />
+          </div>
+        </div>
+        <span>{label}</span>
+      </label>
+    </div>
+  );
+}
+
 export default function ViewOrder() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editedData, setEditedData] = useState({
@@ -45,11 +90,14 @@ export default function ViewOrder() {
     Price: '',
     Quantity: '',
   });
+  const [sizeOptions, setSizeOptions] = useState([]);
 
   const router = useRouter();
   const [orderData, setOrderData] = useState(null);
   const [productId, setproductId] = useState("");
   const [comments, setComments] = useState([]);
+  const [activityLogs, setActivityLogs] = useState([]);
+  const [itemActivityLogs, setItemActivityLogs] = useState([]);
   const [isItemCollapsed, setIsItemCollapsed] = useState({});
   const [selectedImage, setSelectedImage] = useState(null);
   const [newComment, setNewComment] = useState({
@@ -65,31 +113,85 @@ export default function ViewOrder() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [currentProductId, setCurrentProductId] = useState(null);
 
+  // --- COMMENT STATE for editing ---
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editingCommentText, setEditingCommentText] = useState("");
+
+  // For item comment form state
+  const [itemNewComment, setItemNewComment] = useState({}); // { [itemId]: { commentText, is_internal } }
+  const [itemEditingCommentId, setItemEditingCommentId] = useState({}); // { [itemId]: commentId }
+  const [itemEditingCommentText, setItemEditingCommentText] = useState({}); // { [itemId]: text }
+  const [deleteCommentModal, setDeleteCommentModal] = useState({ open: false, commentId: null });
+
   // Fetch size quantities when modal opens
-  const openSizeModal = async (orderItemId, productPrice) => {
+//   const openSizeModal = async (orderItemId, productPrice) => {
+//   setIsSizeModalOpen(true);
+//   setCurrentOrderItemId(orderItemId); // Store the current order item ID
+
+//   if (orderItemId) {
+//     setNewSize(prev => ({
+//       ...prev,
+//       Price: productPrice || 40
+//     }));
+
+//     try {
+//       const response = await axios.get(
+//         `https://printmanager-api.onrender.com/api/sizeQuantities/${orderItemId}`
+//       );
+//       setSizeQuantities(response.data);
+//     } catch (error) {
+//       console.error("Error fetching sizes:", error);
+//       toast.error("Failed to load size quantities");
+//     }
+//   } else {
+//     setNewSize(prev => ({
+//       ...prev,
+//       Price: productPrice || 40
+//     }));
+//   }
+// };
+
+const handleAskApproval = async (fileId) => {
+  try {
+    const response = await fetch(`https://printmanager-api.onrender.com/api/customerApprovals/${fileId}`, {
+      method: 'POST'
+    });
+    const data = await response.json();
+    if (response.ok) {
+      alert('Approval email sent successfully!');
+    } else {
+      alert(`Failed to send email: ${data.message}`);
+    }
+  } catch (err) {
+    alert('Error sending approval request');
+    console.error(err);
+  }
+};
+
+const openSizeModal = async (orderItemId, productPrice, productId) => {
   setIsSizeModalOpen(true);
   setCurrentOrderItemId(orderItemId); // Store the current order item ID
 
-  if (orderItemId) {
-    setNewSize(prev => ({
-      ...prev,
-      Price: productPrice || 40
-    }));
+  // Find the product associated with the order item
+  const orderItem = orderData.items.find(item => item.id === orderItemId);
+  const product = orderItem?.product;
 
-    try {
-      const response = await axios.get(
-        `https://printmanager-api.onrender.com/api/sizeQuantities/${orderItemId}`
-      );
-      setSizeQuantities(response.data);
-    } catch (error) {
-      console.error("Error fetching sizes:", error);
-      toast.error("Failed to load size quantities");
-    }
-  } else {
-    setNewSize(prev => ({
-      ...prev,
-      Price: productPrice || 40
-    }));
+  // Set size options from the product
+  setSizeOptions(product?.sizeOptions || []);
+
+  // Initialize newSize with the product's unit price
+  setNewSize({
+    Size: '',
+    Price: productPrice || product?.unitPrice,
+    Quantity: ''
+  });
+
+  try {
+    const response = await axios.get(
+      `https://printmanager-api.onrender.com/api/sizeQuantities/${orderItemId}`
+    );
+    setSizeQuantities(response.data);
+  } catch (error) {
   }
 };
 
@@ -111,7 +213,7 @@ const handleAddSize = async () => {
       {
         ...newSize,
         orderitemId: currentOrderItemId,
-        createdBy: "User Name",
+        createdBy: sessionStorage.getItem("username"),
         Price: parseFloat(newSize.Price),
         Quantity: parseInt(newSize.Quantity),
       }
@@ -146,6 +248,7 @@ const handleUpdateSize = async () => {
         ...editingSize,
         Price: parseFloat(editingSize.Price),
         Quantity: parseInt(editingSize.Quantity),
+        updatedBy:sessionStorage.getItem("username")
       }
     );
 
@@ -221,7 +324,7 @@ const handleAddFile = async () => {
   const formData = new FormData();
   formData.append('file', newFile);
   formData.append('orderId', orderId);
-  formData.append('uploadedBy', "User Name");
+  formData.append('uploadedBy',sessionStorage.getItem("username") );
 
   try {
     setUploadProgress(0);
@@ -267,7 +370,8 @@ const handleAddFileProduct = async () => {
   const formData = new FormData();
   formData.append('file', newFile);
   formData.append('productId', currentProductId);
-  formData.append('uploadedBy', "User Name");
+  formData.append('orderItemId', currentOrderItemId);
+  formData.append('uploadedBy',sessionStorage.getItem("username"));
 
   try {
     setUploadProgress(0);
@@ -439,6 +543,36 @@ const handleDeleteFiles = async () => {
     if (orderId) fetchData();
   }, [orderId]);
 
+  useEffect(() => {
+  async function fetchActivityLogs() {
+    try {
+      const logsRes = await fetch(`https://printmanager-api.onrender.com/api/activitylogs/order/${orderId}`);
+      if (!logsRes.ok) throw new Error("Failed to fetch activity logs");
+      const logsData = await logsRes.json();
+      setActivityLogs(Array.isArray(logsData) ? logsData : []);
+    } catch (error) {
+      console.error("Error fetching activity logs:", error);
+      toast.error(error.message || "Error loading activity logs");
+    }
+  }
+
+  if (orderId) fetchActivityLogs();
+
+  async function fetchItemActivityLogs() {
+    try {
+      const logsRes = await fetch(`https://printmanager-api.onrender.com/api/activitylogs/orderitem/${orderId}`);
+      if (!logsRes.ok) throw new Error("Failed to fetch activity logs");
+      const logsData = await logsRes.json();
+      setItemActivityLogs(Array.isArray(logsData) ? logsData : []);
+    } catch (error) {
+      console.error("Error fetching activity logs:", error);
+      toast.error(error.message || "Error loading activity logs");
+    }
+  }
+
+  if (orderId) fetchItemActivityLogs();
+}, [orderId]);
+
   if (!orderData) return <div className="flex justify-center items-center h-screen">Loading...</div>;
 
   const getStatusColor = (status) => {
@@ -488,43 +622,199 @@ const handleDeleteFiles = async () => {
   };
 
   const handleCommentChange = (e) => {
-    const { name, value, type, checked } = e.target;
+    const { name, value } = e.target;
     setNewComment((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value,
+      [name]: value,
+    }));
+  };
+
+  // Internal/Public toggle
+  const handleInternalToggle = (isInternal) => {
+    setNewComment((prev) => ({
+      ...prev,
+      is_internal: isInternal,
+    }));
+  };
+
+  // For item comment form
+  const handleItemInternalToggle = (itemId, isInternal) => {
+    setItemNewComment((prev) => ({
+      ...prev,
+      [itemId]: {
+        ...prev[itemId],
+        is_internal: isInternal,
+      },
     }));
   };
 
   const handleAddComment = async (e) => {
     e.preventDefault();
-    if (!newComment.commentText || !newComment.commentBy) {
-      toast.error("Comment text and author are required");
+    if (!newComment.commentText) {
+      toast.error("Comment text is required");
       return;
     }
-
     try {
       const commentData = {
         orderId: parseInt(orderId),
         commentText: newComment.commentText,
-        commentBy: newComment.commentBy,
+        commentBy: sessionStorage.getItem("username") || "Anonymous",
         is_internal: newComment.is_internal,
+        orderItemId: null,
       };
-
       const res = await fetch("https://printmanager-api.onrender.com/api/comments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(commentData),
       });
-
       if (!res.ok) throw new Error("Failed to add comment");
       const addedComment = await res.json();
       setComments((prev) => [...prev, addedComment]);
-      setNewComment({ commentText: "", commentBy: "", is_internal: false });
+      setNewComment({ commentText: "", is_internal: false });
       toast.success("Comment added successfully");
     } catch (error) {
       console.error("Error adding comment:", error);
       toast.error(error.message || "Error adding comment");
     }
+  };
+
+  // For item comment form
+  const handleItemCommentChange = (itemId, e) => {
+    const { name, value } = e.target;
+    setItemNewComment((prev) => ({
+      ...prev,
+      [itemId]: {
+        ...prev[itemId],
+        [name]: value,
+      },
+    }));
+  };
+
+  const handleAddItemComment = (itemId) => async (e) => {
+    e.preventDefault();
+    const commentText = itemNewComment[itemId]?.commentText;
+    if (!commentText) {
+      toast.error("Comment text is required");
+      return;
+    }
+    try {
+      const commentData = {
+        orderId: parseInt(orderId),
+        orderItemId: itemId,
+        commentText,
+        commentBy: sessionStorage.getItem("username") || "Anonymous",
+        is_internal: itemNewComment[itemId]?.is_internal || false,
+      };
+      const res = await fetch("https://printmanager-api.onrender.com/api/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(commentData),
+      });
+      if (!res.ok) throw new Error("Failed to add comment");
+      const addedComment = await res.json();
+      setComments((prev) => [...prev, addedComment]);
+      setItemNewComment((prev) => ({ ...prev, [itemId]: { commentText: "", is_internal: false } }));
+      toast.success("Comment added successfully");
+    } catch (error) {
+      toast.error(error.message || "Error adding comment");
+    }
+  };
+
+  // Edit for item comments
+  const handleEditItemComment = (itemId, comment) => {
+    setItemEditingCommentId((prev) => ({ ...prev, [itemId]: comment.id }));
+    setItemEditingCommentText((prev) => ({ ...prev, [itemId]: comment.commentText }));
+  };
+  const handleEditItemCommentChange = (itemId, e) => {
+    setItemEditingCommentText((prev) => ({ ...prev, [itemId]: e.target.value }));
+  };
+  const handleSaveEditItemComment = (itemId, comment) => async () => {
+    try {
+      const res = await fetch(`https://printmanager-api.onrender.com/api/comments/${comment.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...comment,
+          commentText: itemEditingCommentText[itemId],
+          updatedAt: new Date().toISOString(),
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to update comment");
+      const updatedComment = await res.json();
+      setComments((prev) => prev.map((c) => (c.id === comment.id ? updatedComment : c)));
+      setItemEditingCommentId((prev) => ({ ...prev, [itemId]: null }));
+      setItemEditingCommentText((prev) => ({ ...prev, [itemId]: "" }));
+      toast.success("Comment updated successfully");
+    } catch (error) {
+      toast.error(error.message || "Error updating comment");
+    }
+  };
+  const handleCancelEditItemComment = (itemId) => {
+    setItemEditingCommentId((prev) => ({ ...prev, [itemId]: null }));
+    setItemEditingCommentText((prev) => ({ ...prev, [itemId]: "" }));
+  };
+
+  // Edit comment handlers
+  const handleEditComment = (comment) => {
+    setEditingCommentId(comment.id);
+    setEditingCommentText(comment.commentText);
+  };
+
+  const handleEditCommentChange = (e) => {
+    setEditingCommentText(e.target.value);
+  };
+
+  const handleSaveEditComment = async (comment) => {
+    try {
+      const res = await fetch(`https://printmanager-api.onrender.com/api/comments/${comment.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...comment,
+          commentText: editingCommentText,
+          updatedAt: new Date().toISOString(),
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to update comment");
+      const updatedComment = await res.json();
+      setComments((prev) => prev.map((c) => (c.id === comment.id ? updatedComment : c)));
+      setEditingCommentId(null);
+      setEditingCommentText("");
+      toast.success("Comment updated successfully");
+    } catch (error) {
+      toast.error(error.message || "Error updating comment");
+    }
+  };
+
+  const handleCancelEditComment = () => {
+    setEditingCommentId(null);
+    setEditingCommentText("");
+  };
+
+  // Delete comment (order or item)
+  const handleDeleteComment = (commentId) => {
+    setDeleteCommentModal({ open: true, commentId });
+  };
+
+  const confirmDeleteComment = async () => {
+    const commentId = deleteCommentModal.commentId;
+    if (!commentId) return;
+    try {
+      const res = await fetch(`https://printmanager-api.onrender.com/api/comments/${commentId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("Failed to delete comment");
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+      toast.success("Comment deleted successfully");
+    } catch (error) {
+      toast.error(error.message || "Error deleting comment");
+    } finally {
+      setDeleteCommentModal({ open: false, commentId: null });
+    }
+  };
+
+  const cancelDeleteComment = () => {
+    setDeleteCommentModal({ open: false, commentId: null });
   };
 
   return (
@@ -550,32 +840,36 @@ const handleDeleteFiles = async () => {
         </div>
 
         {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="flex flex-col gap-4">
           {/* Left Sidebar - Order Summary */}
           <div className="lg:col-span-1 space-y-6">
             {/* Customer Information */}
             <div className="bg-white p-6 rounded-lg border border-[#e5e7eb]">
               <h3 className="text-lg font-medium text-gray-900 mb-4">Customer Information</h3>
-              <div className="space-y-4 text-sm">
-                <div>
-                  <p className="text-gray-500">Name</p>
-                  <p className="font-medium">{orderData.customer.name || "N/A"}</p>
+              <div className="w-full grid grid-cols-1 md:grid-cols-3 sm:grid-cols-2 gap-4">
+                <div className="border border-[#e5e7eb] px-5 py-4 flex flex-col gap-2">
+                  <h5 className="font-bold text-[#111928] text-[16px]">First Name</h5>
+                  <h5 className="text-[#6b7280] text-[15px]">{orderData.customer.firstName || "N/A"}</h5>
                 </div>
-                <div>
-                  <p className="text-gray-500">Email</p>
-                  <p className="font-medium">{orderData.customer.email || "N/A"}</p>
+                <div className="border border-[#e5e7eb] px-5 py-4 flex flex-col gap-2">
+                  <h5 className="font-bold text-[#111928] text-[16px]">Last Name</h5>
+                  <h5 className="text-[#6b7280] text-[15px]">{orderData.customer.lastName || "N/A"}</h5>
                 </div>
-                <div>
-                  <p className="text-gray-500">Mobile</p>
-                  <p className="font-medium">{orderData.customer.mobile || "N/A"}</p>
+                <div className="border border-[#e5e7eb] px-5 py-4 flex flex-col gap-2">
+                  <h5 className="font-bold text-[#111928] text-[16px]">Email</h5>
+                  <h5 className="text-[#6b7280] text-[15px]">{orderData.customer.email || "N/A"}</h5>
                 </div>
-                <div>
-                  <p className="text-gray-500">Company</p>
-                  <p className="font-medium">{orderData.customer.company || "N/A"}</p>
+                <div className="border border-[#e5e7eb] px-5 py-4 flex flex-col gap-2">
+                  <h5 className="font-bold text-[#111928] text-[16px]">Mobile</h5>
+                  <h5 className="text-[#6b7280] text-[15px]">{orderData.customer.mobile || "N/A"}</h5>
                 </div>
-                <div>
-                  <p className="text-gray-500">Address</p>
-                  <p className="font-medium">{orderData.customer.address || "N/A"}</p>
+                <div className="border border-[#e5e7eb] px-5 py-4 flex flex-col gap-2">
+                  <h5 className="font-bold text-[#111928] text-[16px]">Company</h5>
+                  <h5 className="text-[#6b7280] text-[15px]">{orderData.customer.company || "N/A"}</h5>
+                </div>
+                <div className="border border-[#e5e7eb] px-5 py-4 flex flex-col gap-2">
+                  <h5 className="font-bold text-[#111928] text-[16px]">Address</h5>
+                  <h5 className="text-[#6b7280] text-[15px]">{orderData.customer.address || "N/A"}</h5>
                 </div>
               </div>
             </div>
@@ -623,7 +917,7 @@ const handleDeleteFiles = async () => {
                 {activeTab === "overview" && (
                   <div>
                     <h3 className="text-lg font-medium text-gray-900 mb-4">Order Overview</h3>
-                      <div className="bg-white p-6 rounded-lg border border-[#e5e7eb]">
+                      <div>
                           <div className="flex justify-end items-center mb-4">
                             <button
                               onClick={openEditModal}
@@ -635,23 +929,24 @@ const handleDeleteFiles = async () => {
                               Edit
                             </button>
                           </div>
+                          {/* className="border border-[#e5e7eb] px-5 py-4 bg-white" */}
 
-                          <div className="grid grid-cols-2 gap-2 text-sm">
-                            <div>
-                              <p className="text-gray-500">Title</p>
-                              <p className="font-medium">{orderData.title || "N/A"}</p>
+                          <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="border border-[#e5e7eb] px-5 py-4 flex flex-col gap-2">
+                              <h5 className="font-bold text-[#111928] text-[16px]">Title:</h5>
+                              <h5 className="text-[#6b7280] text-[15px]">{orderData.title || "N/A"}</h5>
                             </div>
-                            <div>
-                              <p className="text-gray-500">Start Date</p>
-                              <p className="font-medium">{new Date(orderData.startDate).toLocaleDateString() || "N/A"}</p>
+                            <div className="border border-[#e5e7eb] px-5 py-4 flex flex-col gap-2">
+                              <h5 className="font-bold text-[#111928] text-[16px]">Start Date:</h5>
+                              <h5 className="text-[#6b7280] text-[15px]">{new Date(orderData.startDate).toLocaleDateString() || "N/A"}</h5>
                             </div>
-                            <div>
-                              <p className="text-gray-500">Due Date</p>
-                              <p className="font-medium">{new Date(orderData.dueDate).toLocaleDateString() || "N/A"}</p>
+                            <div className="border border-[#e5e7eb] px-5 py-4 flex flex-col gap-2">
+                              <h5 className="font-bold text-[#111928] text-[16px]">Due Date:</h5>
+                              <h5 className="text-[#6b7280] text-[15px]">{new Date(orderData.dueDate).toLocaleDateString() || "N/A"}</h5>
                             </div>
-                            <div>
-                              <p className="text-gray-500">Notes</p>
-                              <p className="font-medium">{orderData.notes || "N/A"}</p>
+                            <div className="border border-[#e5e7eb] px-5 py-4 flex flex-col gap-2">
+                              <h5 className="font-bold text-[#111928] text-[16px]">Notes:</h5>
+                              <h5 className="text-[#6b7280] text-[15px]">{orderData.notes || "N/A"}</h5>
                             </div>
                           </div>
                         </div>
@@ -666,7 +961,7 @@ const handleDeleteFiles = async () => {
                     </div>
 
                     {orderData.items.map((item, itemIndex) => (
-                      <div key={item.id} className="mb-6 border border-gray-200 rounded-lg overflow-hidden">
+                      <div key={item.id} className="mb-6 border border-gray-200 rounded-lg overflow-hidden shadow-lg">
                         <div
                           className="flex justify-between items-center p-6 cursor-pointer"
                           onClick={() => toggleItemCollapse(itemIndex)}
@@ -679,7 +974,7 @@ const handleDeleteFiles = async () => {
                         </div>
 
                         {!isItemCollapsed[itemIndex] && (
-                          <div className="p-4 bg-white">
+                          <div className="p-6 bg-white">
                             <nav className="flex border-b border-gray-200 mb-4">
                               <button
                                 onClick={() => setActiveItemTab("details")}
@@ -714,24 +1009,50 @@ const handleDeleteFiles = async () => {
                             </nav>
 
                             {activeItemTab === "details" && (
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                  <h5 className="font-medium text-gray-900 mb-2">Product Details</h5>
-                                  <div className="space-y-2 text-sm">
-                                    <p><span className="text-gray-500">Product:</span> {item.product?.title || "N/A"}</p>
-                                    <p><span className="text-gray-500">Color:</span> {item.color || "N/A"}</p>
-                                    <p><span className="text-gray-500">Quantity:</span> {item.quantity || "N/A"}</p>
-                                    <p><span className="text-gray-500">Price:</span> ${item.price || "0.00"}</p>
+                              <div className="flex flex-col gap-4">
+                              <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="border border-[#e5e7eb] px-5 py-4 flex flex-col gap-2"><h5 className="font-bold text-[#111928] text-[16px]">Product:</h5> <h5 className="text-[#6b7280] text-[15px]">{item.product?.title || "N/A"}</h5></div>
+                                <div className="border border-[#e5e7eb] px-5 py-4 flex flex-col gap-2"><h5 className="font-bold text-[#111928] text-[16px]">Color:</h5> <h5 className="text-[#6b7280] text-[15px]">{item.color || "N/A"}</h5></div>
+                                <div className="border border-[#e5e7eb] px-5 py-4 flex flex-col gap-2"><h5 className="font-bold text-[#111928] text-[16px]">Quantity:</h5> <h5 className="text-[#6b7280] text-[15px]">{item.quantity || "N/A"}</h5></div>
+                                <div className="border border-[#e5e7eb] px-5 py-4 flex flex-col gap-2"><h5 className="font-bold text-[#111928] text-[16px]">Price:</h5> <h5 className="text-[#6b7280] text-[15px]">${item.price || "0"}</h5></div>
+                                <div className="border border-[#e5e7eb] px-5 py-4 flex flex-col gap-2"><h5 className="font-bold text-[#111928] text-[16px]">Service:</h5> <h5 className="text-[#6b7280] text-[15px]">{item.product?.service?.title || "N/A"}</h5></div>
+                                <div className="border border-[#e5e7eb] px-5 py-4 flex flex-col gap-2"><h5 className="font-bold text-[#111928] text-[16px]">Workflow:</h5> <h5 className="text-[#6b7280] text-[15px]">{item.product?.service?.workflow?.title || "N/A"}</h5></div>
+                                <div className="border border-[#e5e7eb] px-5 py-4 flex flex-col gap-2"><h5 className="font-bold text-[#111928] text-[16px]">Current Stage:</h5> <h5 className="text-[#6b7280] text-[15px]">{item.currentStage || "N/A"}</h5></div>
+                                {/* Stage Change Radio Buttons */}
+                                {item.product?.service?.workflow?.stages && (
+                                  <div className="border border-[#e5e7eb] px-5 py-4 flex flex-col gap-2">
+                                    <h5 className="font-bold text-[#111928] text-[16px]">Change Stage:</h5>
+                                    <div className="flex flex-wrap gap-4">
+                                      {item.product?.service?.workflow?.stages.map((stage, idx) => (
+                                        <CustomStageRadio
+                                          key={idx}
+                                          label={stage.title}
+                                          checked={item.currentStage === stage.title}
+                                          name={`stage-${item.id}`}
+                                          onChange={async () => {
+                                            const newStage = stage.title;
+                                            try {
+                                              await axios.put(`https://printmanager-api.onrender.com/api/orderItems/${item.id}`, {
+                                                currentStage: newStage,
+                                                updatedBy: sessionStorage.getItem("username"),
+                                              });
+                                              setOrderData(prev => ({
+                                                ...prev,
+                                                items: prev.items.map(itm =>
+                                                  itm.id === item.id ? { ...itm, currentStage: newStage } : itm
+                                                )
+                                              }));
+                                              toast.success("Stage updated successfully");
+                                            } catch (error) {
+                                              toast.error("Failed to update stage");
+                                            }
+                                          }}
+                                        />
+                                      ))}
+                                    </div>
                                   </div>
-                                </div>
-                                <div>
-                                  <h5 className="font-medium text-gray-900 mb-2">Service Details</h5>
-                                  <div className="space-y-2 text-sm">
-                                    <p><span className="text-gray-500">Service:</span> {item.product?.service?.title || "N/A"}</p>
-                                    <p><span className="text-gray-500">Workflow:</span> {item.product?.service?.workflow?.title || "N/A"}</p>
-                                    <p><span className="text-gray-500">Current Stage:</span> {item.currentStage || "N/A"}</p>
-                                  </div>
-                                </div>
+                                )}
+                              </div>
 
                                 {/* Size Quantities */}
                                 <div className="md:col-span-2">
@@ -739,8 +1060,7 @@ const handleDeleteFiles = async () => {
                                     <h5 className="font-medium text-gray-900">Size Quantities</h5>
                                     <button
                                       onClick={() => {
-                                        openSizeModal(item.sizeQuantities.id, item.product.unitPrice);
-                                        setCurrentOrderItemId(item.id);
+                                        openSizeModal(item.id, item.product.unitPrice, item.product.id);
                                       }}
                                       className="text-indigo-600 hover:text-indigo-800 text-sm flex items-center gap-1"
                                     >
@@ -787,6 +1107,7 @@ const handleDeleteFiles = async () => {
                                       onClick={() => {
                                         setIsSizeModalOpen(false);
                                         setEditingSize(null);
+                                        setSizeOptions([]); // Reset size options when closing
                                       }}
                                       className="text-gray-400 hover:text-gray-500"
                                     >
@@ -805,14 +1126,19 @@ const handleDeleteFiles = async () => {
                                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         <div>
                                           <label className="block text-sm font-medium text-gray-700 mb-1">Size</label>
-                                          <input
-                                            type="text"
+                                          <select
                                             name="Size"
                                             value={editingSize?.Size || newSize.Size}
                                             onChange={handleSizeChange}
                                             className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1]"
-                                            placeholder="e.g., S, M, L"
-                                          />
+                                          >
+                                            <option value="">Select Size</option>
+                                            {sizeOptions.map((size, i) => (
+                                              <option key={i} value={size}>
+                                                {size}
+                                              </option>
+                                            ))}
+                                          </select>
                                         </div>
                                         <div>
                                           <label className="block text-sm font-medium text-gray-700 mb-1">Price</label>
@@ -918,24 +1244,30 @@ const handleDeleteFiles = async () => {
                             )}
 
                             {activeItemTab === "workflow" && (
-                              <div>
-                                <h5 className="font-medium text-gray-900 mb-2">Workflow Stages</h5>
-                                <div className="space-y-2">
-                                  {item.product?.service?.workflow?.stages.map((stage, stageIndex) => (
-                                    <div key={stageIndex} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                      <span className="h-3 w-3 rounded-full" style={{ backgroundColor: stage.color }}></span>
-                                      <div className="flex-1">
-                                        <p className="text-sm font-medium text-gray-900">{stage.title}</p>
-                                        <p className="text-xs text-gray-500">{stage.days} days</p>
+                                <div>
+                                  <h5 className="font-medium text-gray-900 mb-2">Workflow Stages</h5>
+                                  <div className="space-y-2">
+                                    {item.product?.service?.workflow?.stages.map((stage, stageIndex) => (
+                                      <div
+                                        key={stageIndex}
+                                        className="flex items-center gap-3 border border-[#e5e7eb] px-5 py-4"
+                                      >
+                                        <span
+                                          className="h-3 w-3 rounded-full"
+                                          style={{ backgroundColor: stage.color }}
+                                        ></span>
+                                        <div className="flex-1">
+                                          <p className="text-sm font-medium text-gray-900">{stage.title}</p>
+                                          <p className="text-xs text-gray-500">{stage.days} days</p>
+                                        </div>
+                                        <div className="text-xs text-gray-500">
+                                          {stage.title === item.currentStage ? "Current" : ""}
+                                        </div>
                                       </div>
-                                      <div className="text-xs text-gray-500">
-                                        {stageIndex === 0 ? "Current" : ""}
-                                      </div>
-                                    </div>
-                                  ))}
+                                    ))}
+                                  </div>
                                 </div>
-                              </div>
-                            )}
+                              )}
 
                             {activeItemTab === "files" && (
                               <div>
@@ -945,6 +1277,7 @@ const handleDeleteFiles = async () => {
                                     onClick={() => {
                                       setIsFilesModalOpenProduct(true);
                                       setCurrentProductId(item.product.id);
+                                      setCurrentOrderItemId(item.id)
                                     }}
                                     className="text-indigo-600 hover:text-indigo-800 text-sm flex items-center gap-1"
                                   >
@@ -954,14 +1287,14 @@ const handleDeleteFiles = async () => {
                                     Add Files
                                   </button>
                                 </div>
-                                {item.product?.files.length > 0 ? (
+                                {item.product.files.length > 0 ? (
                                   <div className="space-y-2">
-                                    {item.product?.files.map((file, fileIndex) => {
+                                    {item.files.map((file, fileIndex) => {
                                       const isImage = ["jpg", "jpeg", "png"].includes(
                                         file.fileName.split('.').pop().toLowerCase()
                                       );
                                       return (
-                                        <div key={fileIndex} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                        <div key={fileIndex} className="flex items-center gap-3 border border-[#e5e7eb] px-5 py-4">
                                           {getFileIcon(file.fileName.split('.').pop())}
                                           <div className="flex-1">
                                             <p className="text-sm text-gray-900">{file.fileName}</p>
@@ -992,16 +1325,126 @@ const handleDeleteFiles = async () => {
                             )}
 
                             {activeItemTab === "comments" && (
-                              <div>
+                              <div className="flex flex-col gap-3">
                                 <h5 className="font-medium text-gray-900 mb-2">Item Comments</h5>
-                                <p className="text-sm text-gray-500">Comments specific to this order item.</p>
+                                <p className="text-sm text-gray-500 mb-4">Comments specific to this order item.</p>
+                                {/* Item Comments List as chat bubbles */}
+                                <div className="space-y-4">
+                                  {comments.filter(c => c.orderItemId === item.id).length > 0 ? (
+                                    comments.filter(c => c.orderItemId === item.id).map((comment, index) => {
+                                      const isOwn = comment.commentBy === (sessionStorage.getItem("username") || "Anonymous");
+                                      const isEdited = comment.updatedAt && comment.updatedAt !== comment.createdAt;
+                                      return (
+                                        <div key={index} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                                          <div className={`max-w-lg w-fit p-4 rounded-2xl shadow border relative ${comment.is_internal ? 'bg-purple-50 border-purple-200' : 'bg-indigo-50 border-indigo-200'} ${isOwn ? 'ml-16' : 'mr-16'}`}>
+                                            <div className="flex items-center gap-2 mb-1">
+                                              <span className={`text-xs font-semibold ${comment.is_internal ? 'text-purple-700' : 'text-indigo-700'}`}>{comment.is_internal ? 'Internal' : 'Public'}</span>
+                                              <span className="text-xs text-gray-500">{comment.commentBy || "Anonymous"}</span>
+                                            </div>
+                                            {itemEditingCommentId[item.id] === comment.id ? (
+                                              <>
+                                                <input
+                                                  value={itemEditingCommentText[item.id]}
+                                                  onChange={(e) => handleEditItemCommentChange(item.id, e)}
+                                                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 mb-2"
+                                                />
+                                                <div className="flex gap-2 justify-end">
+                                                  <button type="button" onClick={handleSaveEditItemComment(item.id, comment)} className="px-3 py-1 bg-indigo-600 text-white rounded-md text-xs">Save</button>
+                                                  <button type="button" onClick={() => handleCancelEditItemComment(item.id)} className="px-3 py-1 bg-gray-200 text-gray-700 rounded-md text-xs">Cancel</button>
+                                                </div>
+                                              </>
+                                            ) : (
+                                              <>
+                                                <p className="text-sm text-gray-800 whitespace-pre-line">{comment.commentText}</p>
+                                                <div className="flex items-center gap-2 mt-2">
+                                                  <span className="text-xs text-gray-500">{new Date(comment.commentAt || comment.createdAt).toLocaleString()}</span>
+                                                  {isEdited && <span className="text-xs text-gray-400">Edited</span>}
+                                                  {isOwn && (
+                                                    <>
+                                                      <button type="button" onClick={() => handleEditItemComment(item.id, comment)} className="ml-2 text-xs text-indigo-600 hover:underline">Edit</button>
+                                                      <button type="button" onClick={() => handleDeleteComment(comment.id)} className="ml-2 text-xs text-red-600 hover:underline">Delete</button>
+                                                    </>
+                                                  )}
+                                                </div>
+                                              </>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })
+                                  ) : (
+                                    <div className="bg-white p-6 border border-[#e5e7eb] text-center">
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                                      </svg>
+                                      <h4 className="mt-2 text-sm font-medium text-gray-900">No comments yet</h4>
+                                      <p className="mt-1 text-sm text-gray-500">Be the first to add a comment.</p>
+                                    </div>
+                                  )}
+                                </div>
+                                {/* Add Item Comment Form */}
+                                <div className="bg-white p-6 border border-[#e5e7eb] mb-6">
+                                  <form onSubmit={handleAddItemComment(item.id)} className="space-y-4">
+                                    <div>
+                                      <label className="block text-sm font-medium text-gray-700 mb-1">Add Comment</label>
+                                      <input
+                                        name="commentText"
+                                        value={itemNewComment[item.id]?.commentText || ""}
+                                        onChange={(e) => handleItemCommentChange(item.id, e)}
+                                         className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1]"
+                                        placeholder="Enter your comment"
+                                        required
+                                      />
+                                    </div>
+                                    <div className="flex gap-4 items-center">
+                                      <span className="text-sm font-medium text-gray-700">Type:</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleItemInternalToggle(item.id, false)}
+                                        className={`px-4 py-2 rounded-md border text-sm font-medium focus:outline-none ${!itemNewComment[item.id]?.is_internal ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300'}`}
+                                      >
+                                        Public
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleItemInternalToggle(item.id, true)}
+                                        className={`px-4 py-2 rounded-md border text-sm font-medium focus:outline-none ${itemNewComment[item.id]?.is_internal ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-300'}`}
+                                      >
+                                        Internal
+                                      </button>
+                                    </div>
+                                    <button
+                                      type="submit"
+                                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                    >
+                                      Post Comment
+                                    </button>
+                                  </form>
+                                </div>
                               </div>
                             )}
 
                             {activeItemTab === "activity" && (
                               <div>
-                                <h5 className="font-medium text-gray-900 mb-2">Item Activity Log</h5>
-                                <p className="text-sm text-gray-500">Activity log for this order item.</p>
+                                <h3 className="text-lg font-medium text-gray-900 mb-4">Activity Log</h3>
+                                <div>
+                                  {itemActivityLogs.length === 0 ? (
+                                    <p className="text-gray-500">No activity logs found.</p>
+                                  ) : (
+                                    <ul className="flex flex-col gap-3">
+                                      {itemActivityLogs.map((log) => (
+                                        <li key={log.id} className="border border-[#e5e7eb] px-5 py-4 bg-white">
+                                          <p className="text-sm text-gray-800">
+                                            <strong>{log.action}</strong> by <span className="text-blue-600">{log.performedBy}</span>
+                                          </p>
+                                          <p className="text-xs text-gray-500">
+                                            {new Date(log.createdAt).toLocaleString()}
+                                          </p>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
                               </div>
                             )}
                           </div>
@@ -1033,27 +1476,53 @@ const handleDeleteFiles = async () => {
                             file.fileName.split('.').pop().toLowerCase()
                           );
                           return (
-                            <div key={fileIndex} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                              {getFileIcon(file.fileName.split('.').pop())}
-                              <div className="flex-1">
-                                <p className="text-sm text-gray-900">{file.fileName}</p>
-                                <p className="text-xs text-gray-500">
-                                  Uploaded: {new Date(file.uploadedAt).toLocaleString()}
-                                </p>
-                              </div>
-                              {isImage && (
-                                <button
-                                  onClick={() => openImageViewer(file.filePath)}
-                                  className="text-indigo-600 hover:text-indigo-800 text-sm flex items-center gap-1"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                  </svg>
-                                  View
-                                </button>
-                              )}
-                            </div>
+                           <div key={fileIndex} className="flex items-center gap-3 p-3 border border-[#e5e7eb] px-5 py-4">
+  {getFileIcon(file.fileName.split('.').pop())}
+  <div className="flex-1">
+    <p className="text-sm text-gray-900">{file.fileName}</p>
+    <p className="text-xs text-gray-500">
+      Uploaded: {new Date(file.uploadedAt).toLocaleString()}
+    </p>
+  </div>
+
+  {/* Status badge */}
+  {file.status && (
+    <span
+      className={`text-xs font-semibold px-2 py-1 rounded-full ${
+        file.status === "Approved"
+          ? "bg-green-100 text-green-700"
+          : file.status === "Rejected"
+          ? "bg-red-100 text-red-700"
+          : "bg-yellow-100 text-yellow-700"
+      }`}
+    >
+      {file.status}
+    </span>
+    
+  )}
+
+  <button
+      onClick={() => handleAskApproval(file.id,orderData.token,orderData.customer.email)}
+      className="text-xs text-indigo-600 hover:text-indigo-800"
+    >
+      Ask Approval
+    </button>
+
+  {/* View button for images */}
+  {isImage && (
+    <button
+      onClick={() => openImageViewer(file.filePath)}
+      className="text-indigo-600 hover:text-indigo-800 text-sm flex items-center gap-1"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+      </svg>
+      View
+    </button>
+  )}
+</div>
+
                           );
                         })}
                       </div>
@@ -1076,47 +1545,92 @@ const handleDeleteFiles = async () => {
                 )}
 
                 {activeTab === "comments" && (
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">Comments</h3>
-                    
+                  <div className="flex flex-col gap-3">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Order Comments</h3>
+                    {/* Comments List as chat bubbles */}
+                    <div className="space-y-4">
+                      {comments.filter(c => c.orderItemId == null).length > 0 ? (
+                        comments.filter(c => c.orderItemId == null).map((comment, index) => {
+                          const isOwn = comment.commentBy === (sessionStorage.getItem("username") || "Anonymous");
+                          const isEdited = comment.updatedAt && comment.updatedAt !== comment.createdAt;
+                          return (
+                            <div key={index} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                              <div className={`max-w-lg w-fit p-4 rounded-2xl shadow border relative ${comment.is_internal ? 'bg-purple-50 border-purple-200' : 'bg-indigo-50 border-indigo-200'} ${isOwn ? 'ml-16' : 'mr-16'}`}>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className={`text-xs font-semibold ${comment.is_internal ? 'text-purple-700' : 'text-indigo-700'}`}>{comment.is_internal ? 'Internal' : 'Public'}</span>
+                                  <span className="text-xs text-gray-500">{comment.commentBy || "Anonymous"}</span>
+                                </div>
+                                {editingCommentId === comment.id ? (
+                                  <>
+                                    <input
+                                      value={editingCommentText}
+                                      onChange={handleEditCommentChange}
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 mb-2"
+                                    />
+                                    <div className="flex gap-2 justify-end">
+                                      <button type="button" onClick={() => handleSaveEditComment(comment)} className="px-3 py-1 bg-indigo-600 text-white rounded-md text-xs">Save</button>
+                                      <button type="button" onClick={handleCancelEditComment} className="px-3 py-1 bg-gray-200 text-gray-700 rounded-md text-xs">Cancel</button>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <p className="text-sm text-gray-800 whitespace-pre-line">{comment.commentText}</p>
+                                    <div className="flex items-center gap-2 mt-2">
+                                      <span className="text-xs text-gray-500">{new Date(comment.commentAt || comment.createdAt).toLocaleString()}</span>
+                                      {isEdited && <span className="text-xs text-gray-400">Edited</span>}
+                                      {isOwn && (
+                                        <>
+                                          <button type="button" onClick={() => handleEditComment(comment)} className="ml-2 text-xs text-indigo-600 hover:underline">Edit</button>
+                                          <button type="button" onClick={() => handleDeleteComment(comment.id)} className="ml-2 text-xs text-red-600 hover:underline">Delete</button>
+                                        </>
+                                      )}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="bg-white p-6 border border-[#e5e7eb] text-center">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                          </svg>
+                          <h4 className="mt-2 text-sm font-medium text-gray-900">No comments yet</h4>
+                          <p className="mt-1 text-sm text-gray-500">Be the first to add a comment.</p>
+                        </div>
+                      )}
+                    </div>
                     {/* Add Comment Form */}
-                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-6">
+                    <div className="bg-white p-6 border border-[#e5e7eb] mb-6">
                       <form onSubmit={handleAddComment} className="space-y-4">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">Add Comment</label>
-                          <textarea
+                          <input
                             name="commentText"
                             value={newComment.commentText}
                             onChange={handleCommentChange}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                            className="w-full px-4 py-3 border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5750f1]"
                             placeholder="Enter your comment"
-                            rows={3}
                             required
                           />
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Author</label>
-                            <input
-                              type="text"
-                              name="commentBy"
-                              value={newComment.commentBy}
-                              onChange={handleCommentChange}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                              placeholder="Your name"
-                              required
-                            />
-                          </div>
-                          <div className="flex items-center">
-                            <input
-                              type="checkbox"
-                              name="is_internal"
-                              checked={newComment.is_internal}
-                              onChange={handleCommentChange}
-                              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                            />
-                            <label className="ml-2 block text-sm text-gray-700">Internal Comment</label>
-                          </div>
+                        <div className="flex gap-4 items-center">
+                          <span className="text-sm font-medium text-gray-700">Type:</span>
+                          <button
+                            type="button"
+                            onClick={() => handleInternalToggle(false)}
+                            className={`px-4 py-2 rounded-md border text-sm font-medium focus:outline-none ${!newComment.is_internal ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300'}`}
+                          >
+                            Public
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleInternalToggle(true)}
+                            className={`px-4 py-2 rounded-md border text-sm font-medium focus:outline-none ${newComment.is_internal ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-700 border-gray-300'}`}
+                          >
+                            Internal
+                          </button>
                         </div>
                         <button
                           type="submit"
@@ -1126,74 +1640,29 @@ const handleDeleteFiles = async () => {
                         </button>
                       </form>
                     </div>
-
-                    {/* Comments List */}
-                    <div className="space-y-4">
-                      {comments.length > 0 ? (
-                        comments.map((comment, index) => (
-                          <div key={index} className="space-y-2">
-                            <div
-                              className={`p-4 rounded-lg border ${comment.is_internal ? "bg-purple-50 border-purple-200" : "bg-white border-gray-200"}`}
-                            >
-                              <div className="flex justify-between items-start">
-                                <div>
-                                  <p className="text-sm font-medium text-gray-900">{comment.commentBy || "Anonymous"}</p>
-                                  <p className="text-xs text-gray-500">
-                                    {new Date(comment.commentAt || comment.createdAt).toLocaleString()}
-                                    {comment.is_internal && " • Internal"}
-                                  </p>
-                                </div>
-                                {comment.updatedAt && comment.updatedAt !== comment.createdAt && (
-                                  <span className="text-xs text-gray-400">Edited</span>
-                                )}
-                              </div>
-                              <p className="mt-2 text-sm text-gray-700">{comment.commentText}</p>
-                            </div>
-
-                            {comment.replies && comment.replies.length > 0 && (
-                              <div className="ml-8 space-y-2">
-                                {comment.replies.map((reply, replyIndex) => (
-                                  <div
-                                    key={replyIndex}
-                                    className={`p-3 rounded-lg border ${reply.is_internal ? "bg-purple-50 border-purple-200" : "bg-white border-gray-200"}`}
-                                  >
-                                    <div className="flex justify-between items-start">
-                                      <div>
-                                        <p className="text-sm font-medium text-gray-900">{reply.commentBy || "Anonymous"}</p>
-                                        <p className="text-xs text-gray-500">
-                                          {new Date(reply.commentAt || reply.createdAt).toLocaleString()}
-                                          {reply.is_internal && " • Internal"}
-                                        </p>
-                                      </div>
-                                      {reply.updatedAt && reply.updatedAt !== reply.createdAt && (
-                                        <span className="text-xs text-gray-400">Edited</span>
-                                      )}
-                                    </div>
-                                    <p className="mt-2 text-sm text-gray-700">{reply.commentText}</p>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ))
-                      ) : (
-                        <div className="bg-gray-50 p-8 rounded-lg border border-gray-200 text-center">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                          </svg>
-                          <h4 className="mt-2 text-sm font-medium text-gray-900">No comments yet</h4>
-                          <p className="mt-1 text-sm text-gray-500">Be the first to add a comment.</p>
-                        </div>
-                      )}
-                    </div>
                   </div>
                 )}
 
                 {activeTab === "logs" && (
                   <div>
                     <h3 className="text-lg font-medium text-gray-900 mb-4">Activity Log</h3>
-                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                      <p className="text-gray-700">Here you can see all the activity logs for this order.</p>
+                    <div>
+                      {activityLogs.length === 0 ? (
+                        <p className="text-gray-500">No activity logs found.</p>
+                      ) : (
+                        <ul className="flex flex-col gap-3">
+                          {activityLogs.map((log) => (
+                            <li key={log.id} className="border border-[#e5e7eb] px-5 py-4 bg-white">
+                              <p className="text-sm text-gray-800">
+                                <strong>{log.action}</strong> by <span className="text-blue-600">{log.performedBy}</span>
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {new Date(log.createdAt).toLocaleString()}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1489,6 +1958,30 @@ const handleDeleteFiles = async () => {
                 alt="Order File" 
                 className="max-h-[80vh] max-w-full object-contain mx-auto"
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Comment Modal */}
+      {deleteCommentModal.open && (
+        <div className="fixed inset-0 bg-[#111928]/60 flex items-center justify-center z-50">
+          <div className="bg-white p-8 rounded-lg w-full max-w-[400px] shadow-xl">
+            <h2 className="text-xl font-bold text-[#111928] mb-4">Confirm Delete</h2>
+            <p className="text-sm text-[#111928] mb-4">Are you sure you want to delete this comment?</p>
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={cancelDeleteComment}
+                className="py-[10px] px-6 bg-gray-200 text-[#111928] rounded-lg hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteComment}
+                className="py-[10px] px-6 bg-[#ef4444] text-white rounded-lg hover:bg-red-700"
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>
