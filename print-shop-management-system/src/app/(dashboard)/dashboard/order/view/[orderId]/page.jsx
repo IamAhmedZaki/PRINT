@@ -395,13 +395,12 @@ const handleAddFileProduct = async () => {
     setOrderData(prev => ({
       ...prev,
       items: prev.items.map(item =>
-        item.product.id === currentProductId
+        item.id === currentOrderItemId
           ? {
               ...item,
-              product: {
-                ...item.product,
-                files: [...(item.product.files || []), response.data]
-              }
+              
+                files: [...(item.files || []), response.data]
+              
             }
           : item
       )
@@ -1287,8 +1286,10 @@ const handleDeleteFiles = async () => {
                                     Add Files
                                   </button>
                                 </div>
-                                {item.product.files.length > 0 ? (
+                                {Array.isArray(item.files) && item.files.length > 0 ? (
+                                  
                                   <div className="space-y-2">
+                                    {console.log(item.files)}
                                     {item.files.map((file, fileIndex) => {
                                       const isImage = ["jpg", "jpeg", "png"].includes(
                                         file.fileName.split('.').pop().toLowerCase()
@@ -1319,7 +1320,9 @@ const handleDeleteFiles = async () => {
                                     })}
                                   </div>
                                 ) : (
-                                  <p className="text-sm text-gray-500">No files available for this product</p>
+                                  <p className="text-sm text-gray-500">No files available for this product {console.log(orderData)
+                                  }</p>
+                                  
                                 )}
                               </div>
                             )}
